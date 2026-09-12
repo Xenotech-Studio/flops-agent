@@ -13,6 +13,11 @@ from .transport import (
     public_key_pem,
     reset_transport_cache,
 )
+from .message_crypto import (
+    encrypt_message_for_storage,
+    decrypt_message_for_use,
+    merge_preexisting_ciphertext,
+)
 
 __all__ = [
     "AesGcmError",
@@ -22,4 +27,7 @@ __all__ = [
     "decrypt_with_transport_priv",
     "public_key_pem",
     "reset_transport_cache",
+    "encrypt_message_for_storage",
+    "decrypt_message_for_use",
+    "merge_preexisting_ciphertext",
 ]

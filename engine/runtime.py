@@ -997,4 +997,4 @@ class Runtime:
                 f"tools={len(self.tools or [])} active_runs={len(self.runs)}>")
 
 
-__all__ = ["Runtime"]
+__all__ = ["Runtime", "LLMStreamRetryPolicy"]

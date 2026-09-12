@@ -68,8 +68,9 @@ from .engine.execution import (
     RunStatus,
 )
 from .entities.query import Contributor, Query
-from .engine.runtime import Runtime
+from .engine.runtime import Runtime, LLMStreamRetryPolicy
 from .engine.runner import Runner
+from .engine.stream import StreamAccumulator
 from .entities.session import MessageNotFound, Session, TruncationNeedsConsent
 from .tools.registry import DEFAULT_REGISTRY, ROUTE_EXECUTOR, ToolContext, ToolRegistry
 from .tools.on_executor import register_on_executor_package
@@ -99,6 +100,8 @@ __all__ = [
     "Coalescer",
     "PassthroughCoalescer",
     "LogWrite",
+    "LLMStreamRetryPolicy",
+    "StreamAccumulator",
     "Database",
     "RunStore",
     "InMemoryRunStore",

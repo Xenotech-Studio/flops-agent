@@ -26,6 +26,10 @@ Follow the next link at each article's end on a first read. For a public name,
 treat the package [__init__.py](../__init__.py) as the contract and relevant tests
 as executable examples. Do not use this series as an encyclopedia.
 
+For the full inventory behind that contract — every symbol a known embedding
+product uses, why it is or isn't exported, and what's flagged as product-shaped
+and not framework material — see [api_surface.md](api_surface.md).
+
 For active framework work, read only [TODO.md](TODO.md). It is the sole todo
 source; this series does not duplicate it.
 

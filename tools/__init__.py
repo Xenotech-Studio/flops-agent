@@ -13,6 +13,10 @@ from .registry import (
     ToolRouter,
     kwargs_adapter,
     TOOL_REGISTRY,
+    DEFAULT_REGISTRY,
+    DOMAIN_INFO,
+    PACKAGE_SYSTEM_PROMPTS,
+    register_package,
     register_tool,
     get_tools_for_domain,
     get_tool_handler,
@@ -22,6 +26,7 @@ from .registry import (
     get_tool_catalog_json,
     get_opened_package_prompts,
 )
+from .schema import tool_call_to_openai, parse_tool_arguments
 
 __all__ = [
     "ROUTE_EXECUTOR",
@@ -31,6 +36,10 @@ __all__ = [
     "dispatch_tool",
     "kwargs_adapter",
     "TOOL_REGISTRY",
+    "DEFAULT_REGISTRY",
+    "DOMAIN_INFO",
+    "PACKAGE_SYSTEM_PROMPTS",
+    "register_package",
     "register_tool",
     "get_tools_for_domain",
     "get_tool_handler",
@@ -39,4 +48,6 @@ __all__ = [
     "get_available_domains",
     "get_tool_catalog_json",
     "get_opened_package_prompts",
+    "tool_call_to_openai",
+    "parse_tool_arguments",
 ]
