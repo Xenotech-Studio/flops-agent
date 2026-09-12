@@ -19,7 +19,7 @@ Design principles:
   scoped active-key plumbing (contextvars), hot-reload key stashing, key
   derivation, and account authorization protocols are deployment decisions
   that belong to the product embedding this package, not the framework
-  (see ``docs/TODO.md`` item 3).
+  (see ``docs/TODO.md``'s "Completed framework capabilities" section).
 """
 
 from .aes import AesGcmError, aes_gcm_encrypt, aes_gcm_decrypt

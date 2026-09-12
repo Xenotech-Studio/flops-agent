@@ -5,7 +5,7 @@ which fields of a dict get replaced by their ciphertext form. Callers supply
 an explicit list of (plain_key, ciphertext_key) pairs; this module has no
 opinion on what a field is called or what the record represents. Whose field,
 whose key, is entirely up to the caller — that's the "keys only travel as
-explicit parameters" shape docs/TODO.md item 3 asks for.
+explicit parameters" shape docs/TODO.md's crypto item asks for.
 
 Each field gets its own nonce/tag: a broken field never drags others down.
 Ciphertext lands as a base64 string (JSON / Redis / SQL text column friendly).
