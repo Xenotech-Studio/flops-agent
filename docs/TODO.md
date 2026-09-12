@@ -20,6 +20,9 @@ link here rather than duplicating this list.
 - Fine-grained Database persistence and HistoryChanged notification.
 - Typed lifecycle seams for tool gates, streaming tool results, and runner hooks.
 - A recovery recipe in docs/06-recovery.md.
+- Deployment-specific crypto context, key stash, and SSE crypto removed from the
+  framework; the kernel's crypto package now holds only aes, transport, and the
+  generic field_crypto envelope helper. See docs/api_surface.md's Crypto section.
 
 ## Open framework work
 
@@ -27,19 +30,17 @@ link here rather than duplicating this list.
    broad Any usage and extend the AgentEvent union for interaction events.
 2. Split RunStore into required logging and optional stop, recovery, and dispatch
    capabilities. Make create_run(id) idempotent without resetting resume evidence.
-3. Make keys the only key path. Move deployment-specific crypto context, key stash,
-   and SSE crypto out of the framework.
-4. Make persistence non-blocking by using asynchronous protocols or consistent
+3. Make persistence non-blocking by using asynchronous protocols or consistent
    thread offloading and batching.
-5. Correct shutdown completion behavior, make with_overrides preserve all relevant
+4. Correct shutdown completion behavior, make with_overrides preserve all relevant
    configuration, and prevent concurrent runs for one session.
-6. Close an interrupted LLM stream and prevent replay duplication after retry.
-7. Externalize user- and model-facing copy behind an injectable object with English
+5. Close an interrupted LLM stream and prevent replay duplication after retry.
+6. Externalize user- and model-facing copy behind an injectable object with English
    defaults.
-8. Remove product-shaped assumptions from Session and fully type ToolContext.
-9. Avoid O(n) user-turn recounting in Session.append and align tool success
+7. Remove product-shaped assumptions from Session and fully type ToolContext.
+8. Avoid O(n) user-turn recounting in Session.append and align tool success
    conventions between dispatch and runner.
-10. Add end-to-end tests for recovery, shutdown, stream retry, concurrent starts,
+9. Add end-to-end tests for recovery, shutdown, stream retry, concurrent starts,
     with_overrides, denied tools, and ToolRouter. Move product tests out of
     framework-named test modules.
 
