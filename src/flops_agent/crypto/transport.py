@@ -1,20 +1,15 @@
-"""Server transport keypair helpers for wrapping conversation keys.
+"""Transport-key primitives for wrapping conversation keys.
 
-The kernel has no opinion on where the transport private key lives — no
-default path, no home-directory convention, no filesystem access at all.
-Key provisioning is the embedding application's responsibility: it obtains
-the PEM bytes from wherever is appropriate for its deployment (an env var
-pointing at a file it reads itself, a secrets manager, a KMS-backed
-unwrap, ...) and calls ``configure_transport_privkey_pem()`` once at
-startup with the resulting bytes. Every crypto function in this module
-then operates on that configured key; none of them touch ``os.environ``
-or the filesystem.
+This module does not locate, read, cache, or select a private key. The
+embedding application resolves its secret at its composition root, creates a
+``TransportKey`` from the resulting PEM bytes, and passes that value explicitly
+to each operation. This keeps deployment configuration and key lifetime
+outside the kernel, and permits independent keys in the same process.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -24,104 +19,101 @@ class TransportError(RuntimeError):
     """The common error type for transport-key operations."""
 
 
-_NOT_CONFIGURED_MSG = (
-    "transport private key not configured — call "
-    "configure_transport_privkey_pem() at startup with PEM bytes from "
-    "your config/env"
-)
+@dataclass(frozen=True)
+class TransportKey:
+    """An RSA private key and its derived public PEM, supplied by a caller."""
+
+    _private_key: rsa.RSAPrivateKey
+    _public_pem: str
+
+    @property
+    def public_pem(self) -> str:
+        """The PEM serialization of this key's public half."""
+        return self._public_pem
+
+    def decrypt(self, ciphertext: bytes) -> bytes:
+        """Decrypt RSA-OAEP-SHA256 ciphertext with this key."""
+        return self._private_key.decrypt(
+            ciphertext,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+
+    def encrypt(self, plaintext: bytes) -> bytes:
+        """Encrypt plaintext using this key's public RSA-OAEP-SHA256 half."""
+        return self._private_key.public_key().encrypt(
+            plaintext,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
 
 
-@dataclass
-class _TransportKeyHolder:
-    private_key: Optional[rsa.RSAPrivateKey] = None
-    public_pem: Optional[str] = None
-
-
-_holder = _TransportKeyHolder()
-
-
-def configure_transport_privkey_pem(pem: bytes) -> None:
-    """Configure the transport private key from PEM bytes.
-
-    Call this once at process startup, before any other function in this
-    module is used. The caller (the embedding application) is responsible
-    for obtaining ``pem`` from its own configuration source.
-    """
-    key = serialization.load_pem_private_key(pem, password=None)
-    if not isinstance(key, rsa.RSAPrivateKey):
+def transport_key_from_pem(pem: bytes) -> TransportKey:
+    """Validate PEM bytes and return an explicit transport-key dependency."""
+    if not isinstance(pem, bytes):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TransportError("transport PEM must be bytes")
+    try:
+        private_key = serialization.load_pem_private_key(pem, password=None)
+    except Exception as exc:
+        raise TransportError(f"invalid transport PEM: {exc}") from exc
+    if not isinstance(private_key, rsa.RSAPrivateKey):
         raise TransportError("transport key is not RSA")
-    if key.key_size < 2048:
-        raise TransportError(f"transport key too small ({key.key_size} bits)")
-    pub_pem = key.public_key().public_bytes(
+    if private_key.key_size < 2048:
+        raise TransportError(f"transport key too small ({private_key.key_size} bits)")
+
+    public_pem = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-    _holder.private_key = key
-    _holder.public_pem = pub_pem.decode("ascii")
+    return TransportKey(private_key, public_pem.decode("ascii"))
 
 
-def reset_transport_key() -> None:
-    """Clear the configured key material, e.g. before rotation or in tests."""
-    _holder.private_key = None
-    _holder.public_pem = None
+def _require_transport_key(key: TransportKey) -> TransportKey:
+    if not isinstance(key, TransportKey):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TransportError("transport key must be a TransportKey")
+    return key
 
 
-def _require_key() -> rsa.RSAPrivateKey:
-    if _holder.private_key is None:
-        raise TransportError(_NOT_CONFIGURED_MSG)
-    return _holder.private_key
+def public_key_pem(key: TransportKey) -> str:
+    """Return the public PEM derived from the explicitly supplied key."""
+    return _require_transport_key(key).public_pem
 
 
-def public_key_pem() -> str:
-    """Return the PEM public key derived from the configured private key."""
-    if _holder.public_pem is None:
-        raise TransportError(_NOT_CONFIGURED_MSG)
-    return _holder.public_pem
-
-
-def decrypt_with_transport_priv(ciphertext: bytes) -> bytes:
-    """Decrypt an RSA-OAEP-SHA256 wrapped conversation key."""
+def decrypt_with_transport_priv(key: TransportKey, ciphertext: bytes) -> bytes:
+    """Decrypt an RSA-OAEP-SHA256 wrapped conversation key with ``key``."""
     if not isinstance(ciphertext, (bytes, bytearray)):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TransportError("ciphertext must be bytes")
-    priv = _require_key()
     try:
-        plaintext = priv.decrypt(
-            bytes(ciphertext),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None,
-            ),
-        )
-    except Exception as e:
-        raise TransportError(f"transport decrypt failed: {e}") from e
-    return plaintext
+        return _require_transport_key(key).decrypt(bytes(ciphertext))
+    except TransportError:
+        raise
+    except Exception as exc:
+        raise TransportError(f"transport decrypt failed: {exc}") from exc
 
 
-def encrypt_with_transport_pub(plaintext: bytes) -> bytes:
-    """Wrap a key with the transport public key using RSA-OAEP-SHA256."""
+def encrypt_with_transport_pub(key: TransportKey, plaintext: bytes) -> bytes:
+    """Wrap a key with ``key``'s public RSA-OAEP-SHA256 key."""
     if not isinstance(plaintext, (bytes, bytearray)):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TransportError("plaintext must be bytes")
-    priv = _require_key()
-    pub = priv.public_key()
     try:
-        return pub.encrypt(
-            bytes(plaintext),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None,
-            ),
-        )
-    except Exception as e:
-        raise TransportError(f"transport encrypt failed: {e}") from e
+        return _require_transport_key(key).encrypt(bytes(plaintext))
+    except TransportError:
+        raise
+    except Exception as exc:
+        raise TransportError(f"transport encrypt failed: {exc}") from exc
 
 
 __all__ = [
     "TransportError",
-    "configure_transport_privkey_pem",
+    "TransportKey",
     "decrypt_with_transport_priv",
     "encrypt_with_transport_pub",
     "public_key_pem",
-    "reset_transport_key",
+    "transport_key_from_pem",
 ]
