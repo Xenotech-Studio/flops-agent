@@ -14,12 +14,18 @@ import os
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, ".."))
+_REPO_ROOT = os.path.join(_HERE, "..")
 
 def load_sample():
-    # The sample is now a package (server / local_executor / frontend layers); import the server layer as a package.
-    import importlib
-    return importlib.import_module("flops_agent.docs.sample_product.server")
+    # The sample lives at docs/sample_product/, outside the installable src/ layout;
+    # load it by file path so this test doesn't depend on where flops_agent itself
+    # is installed from.
+    path = os.path.join(_REPO_ROOT, "docs", "sample_product", "server.py")
+    spec = importlib.util.spec_from_file_location("sample_product_server", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 sample = load_sample()
