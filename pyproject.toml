@@ -15,14 +15,32 @@ dynamic = ["version"]
 description = "FLOPS agent kernel — a service-style agent loop (runs, sessions, tools, suspension, recovery)"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
+authors = [{name = "Xenotech Studio"}]
+keywords = ["agent", "llm", "framework", "streaming", "sse"]
+# Placeholder: the project owner has not finalized a license yet (see LICENSE).
+# This must be confirmed before any public release or PyPI upload.
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
 dependencies = [
     "cryptography>=42",
     "typing_extensions>=4.4",   # @override (PEP 698); built into typing on 3.12+.
 ]
 
+[project.urls]
+Homepage = "https://github.com/Xenotech-Studio/flops-agent"
+Repository = "https://github.com/Xenotech-Studio/flops-agent"
+
 [project.optional-dependencies]
-# argon2id KDK derivation + SRP-6a (flops_agent.crypto.kdf, planned next slice).
-kdf = ["argon2-cffi>=21", "srptools>=0.5"]
 # Bundled starter LLM client (SampleDeepseekClient, using the OpenAI protocol).
 providers = ["httpx>=0.24"]
 # Tooling needed to verify this repository without the Flops monorepo.
