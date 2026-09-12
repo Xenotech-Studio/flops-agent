@@ -23,7 +23,7 @@ the same sample_product.
 8. [Worked example](08-worked-example.md) — map the course to three independently understandable product roles.
 
 Follow the next link at each article's end on a first read. For a public name,
-treat the package [__init__.py](../__init__.py) as the contract and relevant tests
+treat the package [__init__.py](../src/flops_agent/__init__.py) as the contract and relevant tests
 as executable examples. Do not use this series as an encyclopedia.
 
 For the full inventory behind that contract — every symbol a known embedding

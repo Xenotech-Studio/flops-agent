@@ -1,7 +1,6 @@
 # flops_agent — independently installable service-style agent kernel.
 #
-# The package temporarily uses a root-package layout: ``package-dir`` maps the
-# distribution's import package (``flops_agent``) onto this repository root.
+# Source layout: the importable package lives under ``src/flops_agent``.
 # Install it (including in CI) before importing or testing it:
 #
 #     pip install -e ".[test,providers]"
@@ -33,21 +32,11 @@ test = ["pytest>=8"]
 testpaths = ["tests"]
 addopts = "-ra"
 
-[tool.setuptools]
-packages = [
-    "flops_agent",
-    "flops_agent.engine",
-    "flops_agent.entities",
-    "flops_agent.executor",
-    "flops_agent.seams",
-    "flops_agent.tools",
-    "flops_agent.crypto",
-    "flops_agent.safety",
-    "flops_agent.providers",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-dir]
-"flops_agent" = "."
+"" = "src"
 
 [tool.setuptools.package-data]
 flops_agent = ["py.typed"]
