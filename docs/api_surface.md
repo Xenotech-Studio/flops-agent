@@ -73,7 +73,7 @@ Classification legend:
 | `get_active_kconv`, `set_active_kconv`, `clear_active_kconv`, `get_active_kagent`, `set_active_kagent`, `clear_active_kagent` (previously `crypto.crypto_context`) | **REMOVED from kernel (step ③)** | Contextvar-based "ambient active key" plumbing tied to Flops's specific request-scoping and hot-reload-recovery model. Per the (now-completed) `docs/TODO.md` item 3. Relocated verbatim (no signature changes — a full redesign to explicit key-passing was judged out of scope for step ③, see step ③ report) to the product repo's `agent/crypto_system/crypto_context.py`. | **Removed from `flops_agent.crypto`.** |
 | `keystash` (previously submodule `crypto.keystash`) | **REMOVED from kernel (step ③)** | Linux user-keyring hot-reload survival mechanism — inherently tied to Flops's `uvicorn --reload` deployment shape. Per the (now-completed) `docs/TODO.md` item 3. Relocated verbatim to `agent/crypto_system/keystash.py` in the product repo. | **Removed from `flops_agent.crypto`.** |
 | `crypto.sse_crypto` (module; `maybe_encrypt_sse_stream` etc.) | **REMOVED from kernel (step ③)** | Depends on `crypto_context.get_active_kconv`. Step ②'s audit claimed zero production call sites — that grep was scoped to `backend/` and missed `server.py` at the product repo root, which does call `maybe_encrypt_sse_stream` for every SSE chat response (`_sse_response`). **Correction:** this is live, load-bearing code, not dead weight. Relocated (not deleted) to `agent/crypto_system/sse_crypto.py` in the product repo, alongside the `crypto_context` it depends on. | **Removed from `flops_agent.crypto`, relocated (not deleted) in the product repo.** |
-| `transport` (submodule, `crypto.transport`) | PUBLIC (stable, submodule-level contract) | Used as a namespace import (`from flops_agent.crypto import transport`) in one file; all its individual names are already exported. Note: `transport.DEFAULT_PRIV_PATH` still hardcodes a Flops filesystem path as its fallback default (overridable via `TRANSPORT_PRIVATE_KEY_PATH`); production has no override set, so this default is load-bearing. Left untouched in step ③ — out of the four modules in scope — but worth a future pass for open-source hygiene. | none for step ③; flagged for a later pass |
+| `transport` (submodule, `crypto.transport`) | PUBLIC (stable, submodule-level contract) | Used as a namespace import (`from flops_agent.crypto import transport`) in one file; all its individual names are already exported. `transport.DEFAULT_PRIV_PATH` now falls back to a generic per-user path (`~/.flops/secrets/transport.priv`) instead of a hardcoded Flops filesystem path; still overridable via `TRANSPORT_PRIVATE_KEY_PATH`. Fixed in step ④ (packaging pass) — the product embedding, which has no env override set today, keeps its own separate copy of this module and is unaffected until it re-syncs from this repository, at which point it must set `TRANSPORT_PRIVATE_KEY_PATH=/home/ubuntu/secrets/transport.priv` explicitly. | done in step ④ |
 
 ## Top-level facade access pattern
 
@@ -100,9 +100,9 @@ Classification legend:
   kept in the kernel as `crypto.field_crypto`, Flops's field-name convention
   moved to `agent/conversation_system/message_crypto.py`. Remaining open
   items: `Session.id_field`/`is_companion`/`is_user_turn` hardcoding
-  `_msg_id`/`isMeta` (tracked by TODO item 7), `isMeta` prompt copy in
-  `tools/on_executor.py`, and `transport.DEFAULT_PRIV_PATH`'s hardcoded
-  fallback (see `crypto.transport` row above) — none of these block step ③.
+  `_msg_id`/`isMeta` (tracked by TODO item 7) and `isMeta` prompt copy in
+  `tools/on_executor.py` — neither blocks step ③. `transport.DEFAULT_PRIV_PATH`'s
+  hardcoded fallback (see `crypto.transport` row above) was fixed in step ④.
 
 No new (c) findings outside what `docs/TODO.md` already tracks — this audit
 corroborates items 3 and 8 with the concrete product call-site evidence rather

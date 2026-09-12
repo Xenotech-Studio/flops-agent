@@ -1,7 +1,8 @@
 """Server transport keypair helpers for wrapping conversation keys.
 
-The private key is loaded from ``TRANSPORT_PRIVATE_KEY_PATH`` or the default
-path. The public PEM is derived from that private key to prevent key drift.
+The private key is loaded from ``TRANSPORT_PRIVATE_KEY_PATH`` or a
+per-user default under the caller's home directory. The public PEM is
+derived from that private key to prevent key drift.
 """
 
 from __future__ import annotations
@@ -14,7 +15,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 
-DEFAULT_PRIV_PATH = Path("/home/ubuntu/secrets/transport.priv")
+# Generic, deployment-agnostic default. A specific deployment (including this
+# framework's own product embedding) should set TRANSPORT_PRIVATE_KEY_PATH to
+# its real key location rather than relying on this fallback.
+DEFAULT_PRIV_PATH = Path("~/.flops/secrets/transport.priv").expanduser()
 ENV_VAR = "TRANSPORT_PRIVATE_KEY_PATH"
 
 
