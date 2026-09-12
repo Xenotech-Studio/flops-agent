@@ -1,9 +1,6 @@
-"""Unit tests for SampleDeepseekClient's SSE parsing (no network) -- chunk shape must line up with
+"""Unit tests for OpenAIStreamClient's SSE parsing (no network) -- chunk shape must line up with
 the framework's accumulator."""
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from flops_agent.providers.deepseek import _chunk_from_json, SampleDeepseekClient
+from flops_agent.providers.openai import _chunk_from_json, OpenAIStreamClient
 from flops_agent.engine.stream import StreamAccumulator
 
 
@@ -33,8 +30,8 @@ def test_usage_and_finish_reason_reach_on_chunk():
 
 
 def test_done_sentinel_and_defaults():
-    cli = SampleDeepseekClient("sk-x")
-    assert cli.model == "deepseek-chat" and cli.base_url == "https://api.deepseek.com"
+    cli = OpenAIStreamClient("sk-x", model="gpt-4o-mini")
+    assert cli.model == "gpt-4o-mini" and cli.base_url == "https://api.openai.com/v1"
     print("test_done_sentinel_and_defaults OK")
 
 

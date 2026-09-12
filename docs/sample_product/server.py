@@ -25,7 +25,7 @@ from flops_agent import (
     Query,
     Runner,
     Runtime,
-    SampleDeepseekClient,
+    OpenAIStreamClient,
     ToolContext,
 )
 
@@ -228,7 +228,7 @@ async def main() -> None:
     # Use the bundled client for a live DeepSeek request when a key is present.
     key = os.environ.get("DEEPSEEK_API_KEY")
     if key:
-        await _demo("Live DeepSeek", SampleDeepseekClient(key), "Introduce yourself in one sentence.")
+        await _demo("Live DeepSeek", OpenAIStreamClient(key, model="deepseek-chat", base_url="https://api.deepseek.com"), "Introduce yourself in one sentence.")
     else:
         print("(Set DEEPSEEK_API_KEY for a live DeepSeek request; using scripted demos below.)")
 

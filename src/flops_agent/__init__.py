@@ -22,7 +22,7 @@ The ``engine``, ``entities``, ``seams``, ``providers``, ``crypto``, and
 ``tools`` subpackages are re-exported here as convenience namespaces.
 """
 
-from .providers.deepseek import SampleDeepseekClient
+from .providers.openai import OpenAIStreamClient
 from .seams.conversation_store import ConversationStore
 from .entities.events import (
     HistoryChanged,
@@ -86,7 +86,7 @@ from .wire import WIRE_TYPES, WireCodec, DEFAULT_CODEC, event_to_wire, to_sse, d
 from . import crypto, executor, tools  # noqa: E402,F401
 
 __all__ = [
-    "SampleDeepseekClient",
+    "OpenAIStreamClient",
     "Agent",
     "Memory",
     # Facade

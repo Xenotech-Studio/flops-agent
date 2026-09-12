@@ -1,11 +1,12 @@
-"""A starter LLM client: supply a DeepSeek key and run.
+"""A starter LLM client: supply an OpenAI-compatible key and run.
 
-The framework requires only ``LLMStreamClient``. This ready-to-use client works
-with any OpenAI-compatible endpoint, including DeepSeek, OpenAI, local vLLM,
-and OpenRouter; set ``base_url`` and ``model`` accordingly. It depends on the
-optional ``httpx`` extra. Production deployments often implement the seam with
-their own provider routing; ``Sample`` deliberately means the shortest useful
-path, not the only production design.
+The framework requires only ``LLMStreamClient``. This ready-to-use client speaks
+the OpenAI chat-completions streaming protocol, which also covers DeepSeek,
+local vLLM, OpenRouter, and most other OpenAI-compatible endpoints; set
+``base_url`` and ``model`` accordingly. It depends on the optional ``httpx``
+extra. Production deployments often implement the seam with their own provider
+routing; this starter deliberately means the shortest useful path, not the
+only production design.
 """
 from __future__ import annotations
 
@@ -55,16 +56,19 @@ def _chunk_from_json(obj: Dict[str, Any]) -> Any:
     return _NS(choices=choices, usage=obj.get("usage"))
 
 
-class SampleDeepseekClient:
-    """Starter streaming LLM client using DeepSeek's OpenAI-compatible protocol.
+class OpenAIStreamClient:
+    """Starter streaming LLM client using the OpenAI chat-completions protocol.
 
-        deepseek = SampleDeepseekClient(api_key="sk-...")
-        runtime = Runtime(llm=deepseek, database=...)
+        llm = OpenAIStreamClient(api_key="sk-...", model="gpt-4o-mini")
+        runtime = Runtime(llm=llm, database=...)
+
+    Point ``base_url`` at any other OpenAI-compatible endpoint (DeepSeek,
+    OpenRouter, local vLLM, ...) to reuse the same client there.
 
     Args:
         api_key: Provider API key.
         model: Default model; a request-level ``model`` takes precedence.
-        base_url: OpenAI-compatible endpoint, DeepSeek by default.
+        base_url: OpenAI-compatible endpoint, OpenAI's by default.
         timeout: Per-request timeout in seconds.
     """
 
@@ -72,13 +76,13 @@ class SampleDeepseekClient:
         self,
         api_key: str,
         *,
-        model: str = "deepseek-chat",
-        base_url: str = "https://api.deepseek.com",
+        model: str,
+        base_url: str = "https://api.openai.com/v1",
         timeout: float = 120.0,
     ):
         if httpx is None:
             raise RuntimeError(
-                "SampleDeepseekClient requires httpx: pip install \"flops-agent[providers]\""
+                "OpenAIStreamClient requires httpx: pip install \"flops-agent[providers]\""
             )
         self.api_key = api_key
         self.model = model
@@ -119,4 +123,4 @@ class SampleDeepseekClient:
         return _gen()
 
 
-__all__ = ["SampleDeepseekClient"]
+__all__ = ["OpenAIStreamClient"]

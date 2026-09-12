@@ -15,7 +15,9 @@ The program prints SSE frames such as \`text_delta\`, tool start and completion,
 
 ## Install and call a real model
 
-The package ships \`SampleDeepseekClient\`, whose default target is DeepSeek. Install the provider extra and set a key:
+The package ships \`OpenAIStreamClient\`, which speaks the OpenAI chat-completions
+streaming protocol (also DeepSeek, OpenRouter, local vLLM, ...). Install the
+provider extra and set a key:
 
 \`\`\`bash
 pip install -e ".[providers]"
@@ -28,12 +30,15 @@ Create \`hello.py\`:
 import asyncio
 import os
 
-from flops_agent import Runtime, SampleDeepseekClient
+from flops_agent import Runtime, OpenAIStreamClient
 
 
 runtime = Runtime(
-    llm=SampleDeepseekClient(os.environ["DEEPSEEK_API_KEY"]),
-    model="deepseek-chat",
+    llm=OpenAIStreamClient(
+        os.environ["DEEPSEEK_API_KEY"],
+        model="deepseek-chat",
+        base_url="https://api.deepseek.com",
+    ),
 )
 
 
