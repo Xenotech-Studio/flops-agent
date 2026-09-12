@@ -1,0 +1,21 @@
+{
+  "include": [
+    "__init__.py",
+    "wire.py",
+    "engine",
+    "entities",
+    "executor",
+    "seams",
+    "tools",
+    "crypto",
+    "safety",
+    "providers"
+  ],
+  "exclude": ["docs", "tests", "build", "dist"],
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Linux",
+  "extraPaths": [".."],
+  "typeCheckingMode": "strict",
+  "reportMissingModuleSource": false,
+  "reportImplicitOverride": "error"
+}

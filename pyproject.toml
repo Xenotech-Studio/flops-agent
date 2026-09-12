@@ -1,0 +1,56 @@
+# flops_agent — independently installable service-style agent kernel.
+#
+# The package temporarily uses a root-package layout: ``package-dir`` maps the
+# distribution's import package (``flops_agent``) onto this repository root.
+# Install it (including in CI) before importing or testing it:
+#
+#     pip install -e ".[test,providers]"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flops-agent"
+dynamic = ["version"]
+description = "FLOPS agent kernel — a service-style agent loop (runs, sessions, tools, suspension, recovery)"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=42",
+    "typing_extensions>=4.4",   # @override (PEP 698); built into typing on 3.12+.
+]
+
+[project.optional-dependencies]
+# argon2id KDK derivation + SRP-6a (flops_agent.crypto.kdf, planned next slice).
+kdf = ["argon2-cffi>=21", "srptools>=0.5"]
+# Bundled starter LLM client (SampleDeepseekClient, using the OpenAI protocol).
+providers = ["httpx>=0.24"]
+# Tooling needed to verify this repository without the Flops monorepo.
+test = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.setuptools]
+packages = [
+    "flops_agent",
+    "flops_agent.engine",
+    "flops_agent.entities",
+    "flops_agent.executor",
+    "flops_agent.seams",
+    "flops_agent.tools",
+    "flops_agent.crypto",
+    "flops_agent.safety",
+    "flops_agent.providers",
+]
+
+[tool.setuptools.package-dir]
+"flops_agent" = "."
+
+[tool.setuptools.package-data]
+flops_agent = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "flops_agent.__version__"}

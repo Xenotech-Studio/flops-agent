@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Commit message validation: the actual rules live in lib/commit_msg_check.sh, shared with CI.
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/.githooks/lib/commit_msg_check.sh" "$1" --cached

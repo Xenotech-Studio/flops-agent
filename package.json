@@ -1,0 +1,8 @@
+{
+  "name": "flops-agent-tooling",
+  "private": true,
+  "description": "Development tooling for flops-agent.",
+  "devDependencies": {
+    "pyright": "1.1.411"
+  }
+}

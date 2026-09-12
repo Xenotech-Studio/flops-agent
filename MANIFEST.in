@@ -1,0 +1,4 @@
+include README.md LICENSE py.typed pyrightconfig.json package.json package-lock.json
+recursive-include docs *.md *.py *.html
+recursive-include tests *.py
+recursive-include scripts *.sh
