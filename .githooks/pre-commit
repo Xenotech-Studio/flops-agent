@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Local framework quality gate.  This is invoked by the repository hook chain;
+# it never installs dependencies or changes Git hook configuration.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+bootstrap_hint() {
+    cat >&2 <<'EOF'
+flops-agent development dependencies are not ready.
+Bootstrap this checkout explicitly, then retry:
+  python -m pip install -e ".[test,providers]"
+  npm ci
+EOF
+}
+
+if ! python -c 'import flops_agent, pytest' >/dev/null 2>&1; then
+    bootstrap_hint
+    exit 1
+fi
+
+if [[ ! -x node_modules/.bin/pyright ]]; then
+    bootstrap_hint
+    exit 1
+fi
+
+bash scripts/run-tests.sh
+bash scripts/run-pyright.sh
