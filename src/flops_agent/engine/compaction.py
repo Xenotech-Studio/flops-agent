@@ -468,9 +468,21 @@ class ProjectionConfig:
     # ── Per-message / range weight (the shared ruler for compaction judgment and the builder) ──
 
     def assistant_projection_char_weight(self, m: Dict[str, Any], *, unit: str = "char") -> int:
-        """Body text + tool_calls arguments (after soft-trim)."""
+        """Body text + reasoning + tool_calls arguments (after soft-trim).
+
+        ``reasoning_content`` is persisted separately from assistant ``content`` but is
+        restored onto the provider wire by the product layer.  It must therefore
+        consume the same projection budget as normal assistant text.  Accept the
+        two legacy aliases too: product normalisation chooses one before sending,
+        while historical records may still carry an older name.
+        """
         text, imgs = content_text_and_image_count(m.get("content"))
         w = self.weigh_text(text, unit) + self.image_weight(imgs, unit)
+        for reasoning_key in ("reasoning_content", "thinking", "reasoning"):
+            reasoning = m.get(reasoning_key)
+            if isinstance(reasoning, str) and reasoning.strip():
+                w += self.weigh_text(reasoning, unit)
+                break
         tcs = m.get("tool_calls")
         if not isinstance(tcs, list):
             return w
@@ -1263,14 +1275,32 @@ class CompactionPolicy:
         target_lo = max(0, target_hi - slack)
         return trigger, target_lo, target_hi
 
-    def decision_overhead_tokens(self, estimator: ProjectionConfig, primary_system_l1_chars: int, tools_schema_l1_chars: int) -> int:
+    def decision_overhead_tokens(
+        self,
+        estimator: ProjectionConfig,
+        primary_system_l1_chars: int,
+        tools_schema_l1_chars: int,
+        *,
+        primary_system_l1_tokens: Optional[int] = None,
+        tools_schema_l1_tokens: Optional[int] = None,
+    ) -> int:
         """Fixed overhead used by the compaction judgment (token units). Not ignored by
         default — the percentage trigger line is well above this fixed overhead, and the
         system prompt / tool schema already occupy part of the window, so they shouldn't be
         excluded from the judgment."""
         if self.ignore_system_overhead:
             return 0
-        return estimator.approx_tokens_from_chars(int(primary_system_l1_chars) + int(tools_schema_l1_chars))
+        primary = (
+            max(0, int(primary_system_l1_tokens))
+            if primary_system_l1_tokens is not None
+            else estimator.approx_tokens_from_chars(int(primary_system_l1_chars))
+        )
+        tools = (
+            max(0, int(tools_schema_l1_tokens))
+            if tools_schema_l1_tokens is not None
+            else estimator.approx_tokens_from_chars(int(tools_schema_l1_chars))
+        )
+        return primary + tools
 
     def summary_injection_tokens(self, estimator: ProjectionConfig, summary_text: str) -> int:
         return estimator.estimate_tokens(SUMMARY_SYSTEM_TAG + (summary_text or ""))
@@ -1372,6 +1402,8 @@ def plan_new_compaction(
     *,
     primary_system_l1_chars: int = 0,
     tools_schema_l1_chars: int = 0,
+    primary_system_l1_tokens: Optional[int] = None,
+    tools_schema_l1_tokens: Optional[int] = None,
     window_usable: int = 0,
 ) -> Optional[CompactionPlan]:
     """Read-only: decides whether a new compaction needs to be triggered + computes the
@@ -1392,7 +1424,13 @@ def plan_new_compaction(
         return None
 
     trigger, target_lo, target_hi = policy.thresholds(window_usable)
-    overhead_fixed = policy.decision_overhead_tokens(estimator, primary_system_l1_chars, tools_schema_l1_chars)
+    overhead_fixed = policy.decision_overhead_tokens(
+        estimator,
+        primary_system_l1_chars,
+        tools_schema_l1_chars,
+        primary_system_l1_tokens=primary_system_l1_tokens,
+        tools_schema_l1_tokens=tools_schema_l1_tokens,
+    )
 
     prev_end = 0
     prev_text = ""
