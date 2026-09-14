@@ -1,4 +1,4 @@
-"""Conversation data and operations over its own history.
+"""Session data and operations over its own history.
 
 Sessions contain no runtime reference and are restored from persistence for each
 request. History edits are addressed by stable message ids or user-turn ordinal,
@@ -39,10 +39,14 @@ class TruncationNeedsConsent(Exception):
 
 
 class Session:
-    """One conversation; products may subclass its storage-facing shape."""
+    """One session; products may subclass its storage-facing shape."""
 
-    #: Message-id field; products may override it for another message shape.
-    id_field = "_msg_id"
+    #: External-message identifier field. Products map their wire schema here.
+    external_id_field = "external_id"
+
+    #: Boolean marker for a system-supplied user-shaped message. Products map
+    #: their own message schema here.
+    system_marker_field = "is_system"
 
     #: Metadata field that stores the title.
     title_field = "title"
@@ -57,9 +61,13 @@ class Session:
     #: Persistent pending-interaction marker, maintained by the framework.
     suspended_field = "pending_interaction"
     #: Persistent paths of tool packages opened in this session.
-    opened_packages_field = "opened_tool_packages"
+    opened_packages_field = "opened_packages"
     #: Product-managed package overlays merged into the effective package set.
-    overlay_packages_field = "overlay_tool_packages"
+    overlay_packages_field = "package_overlays"
+    #: Product-defined action names that change package visibility. None means
+    #: this session has no history-replay convention for that action.
+    open_package_action_name: Optional[str] = None
+    close_package_action_name: Optional[str] = None
 
     def __init__(
         self,
@@ -86,7 +94,7 @@ class Session:
 
     def message_id(self, message: Dict[str, Any]) -> Optional[str]:
         """Return a message's stable id, if any."""
-        value = message.get(self.id_field)
+        value = message.get(self.external_id_field)
         return str(value) if value else None
 
     def index_of(self, message_id: str) -> int:
@@ -117,7 +125,7 @@ class Session:
 
     def is_companion(self, message: Dict[str, Any]) -> bool:
         """Whether a message is metadata attached to a preceding user turn."""
-        return message.get("role") == "user" and bool(message.get("isMeta"))
+        return message.get("role") == "user" and bool(message.get(self.system_marker_field))
 
     def user_turns(self) -> List[int]:
         """Return indexes of independent user-authored turns."""
@@ -125,7 +133,7 @@ class Session:
 
     def is_user_turn(self, message: Dict[str, Any]) -> bool:
         """Whether a message is an independent user-authored contribution."""
-        return message.get("role") == "user" and not message.get("isMeta")
+        return message.get("role") == "user" and not message.get(self.system_marker_field)
 
     def _truncate(self, idx: int, message_id: str, consent: bool) -> int:
         """Apply a truncation after checking the configured consent guard."""
@@ -248,9 +256,13 @@ class Session:
             self.meta = {}
         self.meta[self.opened_packages_field] = list(paths)
 
-    @staticmethod
-    def opened_packages_from_history(messages: List[Dict[str, Any]]) -> List[str]:
-        """Replay package-navigation calls to reconstruct package state."""
+    @classmethod
+    def opened_packages_from_history(cls, messages: List[Dict[str, Any]]) -> List[str]:
+        """Replay product-defined package actions to reconstruct package state."""
+        open_action = cls.open_package_action_name
+        close_action = cls.close_package_action_name
+        if not open_action or not close_action:
+            return []
         opened: set[str] = set()
         for msg in messages:
             if msg.get("role") != "assistant":
@@ -261,7 +273,7 @@ class Session:
                 tc = cast(Dict[str, Any], tc_raw)
                 func = cast(Dict[str, Any], tc.get("function") or {})
                 name = str(func.get("name") or "")
-                if name not in ("open_tool_packages", "close_tool_packages"):
+                if name not in (open_action, close_action):
                     continue
                 args_raw: Any = func.get("arguments")
                 args: Dict[str, Any]
@@ -282,7 +294,7 @@ class Session:
                     ps = p.strip() if isinstance(p, str) else ""
                     if not ps or ps == "/tools":
                         continue
-                    if name == "open_tool_packages":
+                    if name == open_action:
                         if ps.startswith("/tools/"):
                             opened.add(ps)
                     else:

@@ -114,8 +114,8 @@ class WireCodec:
             out["step"] = event.step
         elif isinstance(event, _ev.LoopFinished):
             out["reason"] = event.reason
-            if event.send_queue_pending is not None:
-                out["send_queue_pending"] = event.send_queue_pending
+            if event.pending_input_count is not None:
+                out["pending_input_count"] = event.pending_input_count
             out["done"] = True    # Conventional terminal flag for clients.
         elif isinstance(event, _ev.InteractionRequested):
             out["kind"] = event.kind

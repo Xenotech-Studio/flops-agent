@@ -168,8 +168,8 @@ def test_truncation_syncs_as_truncate():
     db = RecordingDatabase()
     db.create_session("s1")
     session = Session("s1", messages=[
-        {"_msg_id": "u1", "role": "user", "content": "q"},
-        {"_msg_id": "a1", "role": "assistant", "content": "old"},
+        {"external_id": "u1", "role": "user", "content": "q"},
+        {"external_id": "a1", "role": "assistant", "content": "old"},
     ])
     sync_session(db, session)
     db.writes.clear()

@@ -96,10 +96,10 @@ async def dispatch_tool(
             pkg_name = pkg_info.get("name") or required_domain
             return {
                 "success": False,
-                "error": f"Before using tool {function_name}, please call open_tool_packages to open the corresponding tool package first.",
+                "error": f"Tool {function_name} requires its package to be opened before use.",
                 "required_package_path": required_domain,
                 "required_package_name": pkg_name,
-                "hint": f"Call open_tool_packages(package_paths=[\"{required_domain}\"]) to open \"{pkg_name}\" and then retry.",
+                "open_package_request": {"package_paths": [required_domain]},
             }
         result = {
             "success": False,

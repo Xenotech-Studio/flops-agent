@@ -970,7 +970,7 @@ class Runner:
         """Land the arrived side messages into history as-is (filling in a
         message id, without fabricating any other turn)."""
         for message in arrived or []:
-            message.setdefault(self.session.id_field, f"msg_{uuid.uuid4().hex[:12]}")
+            message.setdefault(self.session.external_id_field, f"msg_{uuid.uuid4().hex[:12]}")
             self.session.append(message)
         return arrived or []
 
@@ -1169,7 +1169,7 @@ class Runner:
             message["reasoning_content"] = self.reasoning_text
         if self.tool_calls:
             message["tool_calls"] = [tool_call_to_openai(tc) for tc in self.tool_calls]
-        message.setdefault(self.session.id_field, f"msg_{uuid.uuid4().hex[:12]}")
+        message.setdefault(self.session.external_id_field, f"msg_{uuid.uuid4().hex[:12]}")
         return message
 
     # ── Silent-reply rescue: a concluding step with reasoning but no reply ────
@@ -1378,7 +1378,7 @@ class Runner:
         tcid = call.id or None
         return ToolContext(
             user_id=self.session.owner_id,
-            conversation_id=self.session.session_id,
+            session_id=self.session.session_id,
             function_name=call.function.name,
             tool_domains=["/tools"] + self.session.effective_packages,
             stream_sink=stream_sink,
@@ -1400,7 +1400,7 @@ class Runner:
             "role": "tool",
             "tool_call_id": call.id,
             "content": result_to_content(result),
-            self.session.id_field: f"msg_{uuid.uuid4().hex[:12]}",
+            self.session.external_id_field: f"msg_{uuid.uuid4().hex[:12]}",
         }
 
     async def should_continue(self) -> bool:

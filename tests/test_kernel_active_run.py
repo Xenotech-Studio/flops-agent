@@ -215,20 +215,20 @@ def test_sync_session_equal_count_replaces_tail():
     db = InMemoryDatabase()
     db.create_session("s9", owner_id="u1")
     db.append_messages("s9", [
-        {"role": "user", "content": "q", "_msg_id": "m1"},
-        {"role": "assistant", "content": "old answer", "_msg_id": "m2"},
+        {"role": "user", "content": "q", "external_id": "m1"},
+        {"role": "assistant", "content": "old answer", "external_id": "m2"},
     ], owner_id="u1")
 
     session = Session("s9", owner_id="u1", messages=[
-        {"role": "user", "content": "q", "_msg_id": "m1"},
-        {"role": "assistant", "content": "new answer (tail swapped on finish)", "_msg_id": "m3"},
+        {"role": "user", "content": "q", "external_id": "m1"},
+        {"role": "assistant", "content": "new answer (tail swapped on finish)", "external_id": "m3"},
     ])
     delta = sync_session(db, session)
     assert delta == 0
     stored = db.load_messages("s9", owner_id="u1")
     assert len(stored) == 2 and stored[-1]["content"] == "new answer (tail swapped on finish)", stored
     # append and truncate shapes remain unaffected by this regression
-    session.messages.append({"role": "user", "content": "next", "_msg_id": "m4"})
+    session.messages.append({"role": "user", "content": "next", "external_id": "m4"})
     assert sync_session(db, session) == 1
     del session.messages[1:]
     assert sync_session(db, session) == -2

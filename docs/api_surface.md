@@ -32,9 +32,8 @@ Classification legend:
 |---|---|---|---|
 | `Session` (`entities.session`), `Query`, `Contributor` (`entities.query`), `Agent` (`entities.agent`) | PUBLIC (stable) | Already in top-level `__init__.__all__`. | none — product imports these via the submodule path in several files (STYLE) |
 | `events` (submodule, `entities.events`) | PUBLIC (stable, submodule-level contract) | Individual event classes are already top-level exports; importing the `events` module as a namespace (`from flops_agent.entities import events as ev`) is a normal, supported pattern for exhaustive `isinstance` checks. | none |
-| `Session.id_field = "_msg_id"` (default value) | **PRODUCT** | Class attribute is documented as overridable ("products may override it for another message shape"), but the *default* bakes in Flops's own message-id field name. Not a defect by itself (it's a default, not a hardcode), but flagged because the brief named it explicitly. | Listed for step ③; no change now. Already generically tracked by `docs/TODO.md` item 7 ("Remove product-shaped assumptions from Session"). |
-| `Session.is_companion()` / `Session.is_user_turn()` hardcoding the `"isMeta"` key | **PRODUCT** | Unlike `id_field`, `"isMeta"` is a string literal inside the method bodies, not a class attribute — a product with a different meta-message convention cannot override it without re-implementing both methods. This is the concrete instance behind the brief's `isMeta` example. | Listed for step ③: turn into a class attribute (e.g. `is_meta_field`) alongside `id_field`. Tracked by `docs/TODO.md` item 7. |
-| `"isMeta"` terminology leaking into `tools/on_executor.py` tool-description prompt text (3 sites) | **PRODUCT** | The bundled on-executor tool descriptions (surfaced to the LLM) reference "an isMeta message" by name — framework-bundled tool copy should not assume a product's internal field name. | Listed for step ③; low priority (prompt copy, not code contract). |
+| `Session.external_id_field` / `Session.system_marker_field` | PUBLIC (stable) | Neutral defaults (`external_id` and `is_system`) keep the framework independent of a product message schema; products override the field names at their boundary. | Neutralized under TODO item 7. |
+| Package action names on `Session` | PUBLIC (stable) | History replay is disabled until a product supplies both open and close action names, so the framework does not prescribe a navigation-tool vocabulary. | Neutralized under TODO item 7. |
 
 ## Seams
 
@@ -53,7 +52,7 @@ Classification legend:
 | `DEFAULT_REGISTRY` (`tools.registry`) | **PUBLIC — gap, exported now** | The single shared registry instance; used constantly by product (`agent/tools/__init__.py`, `agent/tools/tool_routing.py`, `agent/tools/chat_toolset.py`) and already top-level, but missing from `tools/__init__.__all__` itself — inconsistent with every other registry symbol. | Added to `tools/__init__.py`. |
 | `DOMAIN_INFO`, `PACKAGE_SYSTEM_PROMPTS` (`tools.registry`) | **PUBLIC — gap, exported now** | Generic mechanism: empty dicts at import time, filled by whichever product registers packages (`DEFAULT_REGISTRY.packages` / `.package_prompts`). No Flops copy lives in the kernel; the docstring already describes this as framework machinery. Used by `agent/tools/__init__.py::init_tool_registry`. | Added to `tools/__init__.py`. |
 | `register_package` (`tools.registry`, module-level convenience wrapper) | **PUBLIC — gap, exported now** | Same "delegate to `DEFAULT_REGISTRY`" pattern as `register_tool`/`get_tools_for_domain`/etc., all of which are already exported; this one was the sole omission. Currently only called by the kernel's own `tools/on_executor.py` and tests, but it's part of the same contract. | Added to `tools/__init__.py`. |
-| `register_navigation_tools` (`tools.navigation`), `register_ask_user_question` (`tools.ask_user`) | PUBLIC (stable) | Already top-level. | none — product imports via submodule path (STYLE) |
+| `register_package_navigation` (`tools.navigation`), `register_ask_user_question` (`tools.ask_user`) | PUBLIC (stable) | The framework applies generic package state while products supply action names and definitions. | none |
 | `tool_call_to_openai`, `parse_tool_arguments` (`tools.schema`) | **PUBLIC — gap, exported now** | `tools/schema.py` already has a full `__all__` (module-level contract exists), but neither name is re-exported from `tools/__init__.py`, unlike every other tools symbol product uses. | Added to `tools/__init__.py`. |
 
 ## Safety
@@ -99,9 +98,9 @@ Classification legend:
   `agent/crypto_system/`. `crypto.message_crypto` split: generic mechanics
   kept in the kernel as `crypto.field_crypto`, Flops's field-name convention
   moved to `agent/conversation_system/message_crypto.py`. Remaining open
-  items: `Session.id_field`/`is_companion`/`is_user_turn` hardcoding
-  `_msg_id`/`isMeta` (tracked by TODO item 7) and `isMeta` prompt copy in
-  `tools/on_executor.py` — neither blocks step ③. `transport`'s filesystem
+  items: session message-field defaults, package-action replay, and
+  on-executor system-notification copy were neutralized under TODO item 7.
+  `transport`'s filesystem
   access (see `crypto.transport` row above) was removed entirely in a later
   pass — the kernel now only accepts an explicit injected key value.
 

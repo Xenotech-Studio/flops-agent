@@ -38,13 +38,15 @@ def test_dispatch_resolves_in_the_context_registry():
         async def ping_b(): return {"from": "b"}
         a.register_tool("/tools/x", "ping", _tool("ping"), ping_a)
         b.register_tool("/tools/x", "ping", _tool("ping"), ping_b)
-        ctx = lambda r: ToolContext(user_id="u", conversation_id="c", function_name="ping", tool_domains=["/tools/x"], registry=r)
+        ctx = lambda r: ToolContext(user_id="u", session_id="s", function_name="ping", tool_domains=["/tools/x"], registry=r)
         assert (await dispatch_tool(_call("ping"), {}, ctx(a))) == {"from": "a"}
         assert (await dispatch_tool(_call("ping"), {}, ctx(b))) == {"from": "b"}
         # package not opened -> rejected, reporting "which package to open" from the registry it belongs to
         a.register_package("/tools/x", name="X Package", description="")
-        closed = await dispatch_tool(_call("ping"), {}, ToolContext(user_id="u", conversation_id="c", function_name="ping", tool_domains=["/tools"], registry=a))
-        assert closed["success"] is False and closed.get("required_package_path") == "/tools/x" and "X Package" in closed["hint"]
+        closed = await dispatch_tool(_call("ping"), {}, ToolContext(user_id="u", session_id="s", function_name="ping", tool_domains=["/tools"], registry=a))
+        assert (closed["success"] is False and closed.get("required_package_path") == "/tools/x"
+                and closed["required_package_name"] == "X Package"
+                and closed["open_package_request"] == {"package_paths": ["/tools/x"]})
     asyncio.run(go())
     print("test_dispatch_resolves_in_the_context_registry OK")
 

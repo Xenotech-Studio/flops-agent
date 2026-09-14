@@ -5,7 +5,7 @@ The agent loop dispatches a tool call through a ``ToolExecutor``:
     result = await executor.execute(call, ctx)
 
 ``ctx`` is the protocol-level ``ToolContext`` (request-dimension data only:
-user/conversation/tool_domains/stream_sink/…).  The framework does not know how
+user/session/tool_domains/stream_sink/…). The framework does not know how
 a tool actually runs — the executor owns that.
 
 Two implementations:

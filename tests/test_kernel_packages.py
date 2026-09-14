@@ -1,6 +1,4 @@
-"""Tool package session state belongs to the framework: opening/closing packages mutates Session,
-persistence goes through patch_meta; navigation tools ship with the framework; opened packages can
-be replayed from history after truncation."""
+"""Product-registered package actions mutate session state through the framework."""
 import asyncio
 import json
 import os
@@ -11,7 +9,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from flops_agent import (  # noqa: E402
-    Contributor, InMemoryDatabase, Query, Runtime, Session, ToolRegistry, register_navigation_tools,
+    Contributor, InMemoryDatabase, Query, Runtime, Session, ToolRegistry, register_package_navigation,
 )
 from flops_agent.entities import events as ev  # noqa: E402
 
@@ -41,7 +39,11 @@ class ScriptedLLM:
 
 def _registry():
     reg = ToolRegistry()
-    register_navigation_tools(reg)
+    register_package_navigation(
+        reg,
+        open_definition=_tool("open_packages"),
+        close_definition=_tool("close_packages"),
+    )
     reg.register_package("/tools/weather", name="Weather", description="Check the weather")
     async def get_weather(city: str = "Shanghai"):
         return {"city": city, "temp": 26}
@@ -57,9 +59,9 @@ def test_open_and_close_change_session_and_persist():
         s = await rt.load_session("s1", owner_id="u1")
         assert s.opened_packages == []
         r = rt.open_packages(s, ["/tools/weather"])
-        assert r["success"] and r["opened_tool_packages"] == ["/tools/weather"] and "Opened 1 tool package" in r["message"]
+        assert r["success"] and r["opened_packages"] == ["/tools/weather"] and "Opened 1 tool package" in r["message"]
         assert s.opened_packages == ["/tools/weather"]
-        assert (db.load_meta("s1", owner_id="u1") or {}).get("opened_tool_packages") == ["/tools/weather"], "persisted via patch_meta"
+        assert (db.load_meta("s1", owner_id="u1") or {}).get("opened_packages") == ["/tools/weather"], "persisted via patch_meta"
         assert rt.open_packages(s, ["/tools/nope"])["error"].startswith("Tool package does not exist or is empty")
         assert rt.open_packages(s, ["/tools/empty"])["error"].startswith("Tool package does not exist or is empty"), "a package with no tools cannot be opened"
         assert rt.open_packages(s, ["bad"])["error"].startswith("Invalid tool package path")
@@ -76,7 +78,7 @@ def test_navigation_tools_run_inside_the_kernel_loop():
     framework's default executor and registry, no host code needed."""
     async def go():
         llm = ScriptedLLM(
-            [_chunk(calls=[("open_tool_packages", {"package_paths": ["/tools/weather"]})])],
+            [_chunk(calls=[("open_packages", {"package_paths": ["/tools/weather"]})])],
             [_chunk(calls=[("get_weather", {"city": "Beijing"})])],
             [_chunk(content="It's 26 degrees in Beijing.")],
         )
@@ -105,7 +107,7 @@ def test_tool_in_unopened_package_is_gated():
             pass
         tool_msg = next(m for m in s.messages if m.get("role") == "tool")
         body = json.dumps(tool_msg.get("content"), ensure_ascii=False)
-        assert "open_tool_packages" in body and "/tools/weather" in body
+        assert "open_package_request" in body and "/tools/weather" in body
     asyncio.run(go())
     print("test_tool_in_unopened_package_is_gated OK")
 
@@ -113,11 +115,15 @@ def test_tool_in_unopened_package_is_gated():
 def test_replay_opened_packages_from_history():
     hist = [
         {"role": "user", "content": "hi"},
-        {"role": "assistant", "tool_calls": [{"function": {"name": "open_tool_packages", "arguments": json.dumps({"package_paths": ["/tools/a", "/tools/b"]})}}]},
-        {"role": "assistant", "tool_calls": [{"function": {"name": "close_tool_packages", "arguments": {"package_paths": "/tools/a"}}}]},
-        {"role": "assistant", "tool_calls": [{"function": {"name": "open_tool_packages", "arguments": "not json"}}]},
+        {"role": "assistant", "tool_calls": [{"function": {"name": "open_packages", "arguments": json.dumps({"package_paths": ["/tools/a", "/tools/b"]})}}]},
+        {"role": "assistant", "tool_calls": [{"function": {"name": "close_packages", "arguments": {"package_paths": "/tools/a"}}}]},
+        {"role": "assistant", "tool_calls": [{"function": {"name": "open_packages", "arguments": "not json"}}]},
     ]
-    assert Session.opened_packages_from_history(hist) == ["/tools/b"]
+    class PackageSession(Session):
+        open_package_action_name = "open_packages"
+        close_package_action_name = "close_packages"
+
+    assert PackageSession.opened_packages_from_history(hist) == ["/tools/b"]
     print("test_replay_opened_packages_from_history OK")
 
 
@@ -125,7 +131,11 @@ def test_visible_tools_follow_opened_packages_and_capability_tags():
     """Visible = root + opened packages (including overlay packages) - packages/tools missing a
     capability - extras the host doesn't need; duplicate names are deduped, order is stable."""
     reg = ToolRegistry()
-    register_navigation_tools(reg)
+    register_package_navigation(
+        reg,
+        open_definition=_tool("open_packages"),
+        close_definition=_tool("close_packages"),
+    )
     reg.register_tool("/tools", "read_image", _tool("read_image"), hidden_when=["model:vision"])
     reg.register_package("/tools/a", name="A", description="")
     reg.register_tool("/tools/a", "a1", _tool("a1"))
@@ -137,7 +147,7 @@ def test_visible_tools_follow_opened_packages_and_capability_tags():
     reg.register_tool("/tools/ov", "a1", _tool("a1"))          # same name as /tools/a -> deduped
 
     names = lambda tools: [t["function"]["name"] for t in tools]
-    root = ["open_tool_packages", "close_tool_packages", "read_image"]
+    root = ["open_packages", "close_packages", "read_image"]
     assert names(reg.visible_tools(["/tools"], set())) == root
     assert names(reg.visible_tools(["/tools", "/tools/a"], set())) == root + ["a1"], "a2 is missing cap.x"
     assert names(reg.visible_tools(["/tools", "/tools/a"], {"cap.x"})) == root + ["a1", "a2"]
@@ -146,7 +156,7 @@ def test_visible_tools_follow_opened_packages_and_capability_tags():
     assert names(reg.visible_tools(["/tools"], {"model:vision"})) == root[:2], "vision models don't get the read-image tool"
     assert names(reg.visible_tools(["/tools", "/tools/a", "/tools/ov"], set())) == root + ["a1", "o1"], "duplicate names dedupe by first occurrence"
 
-    s = Session("s1", meta={"opened_tool_packages": ["/tools/a"], "overlay_tool_packages": ["/tools/ov", "/tools/a"]})
+    s = Session("s1", meta={"opened_packages": ["/tools/a"], "package_overlays": ["/tools/ov", "/tools/a"]})
     assert s.effective_packages == ["/tools/a", "/tools/ov"]
     print("test_visible_tools_follow_opened_packages_and_capability_tags OK")
 

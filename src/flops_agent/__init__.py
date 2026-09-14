@@ -36,7 +36,7 @@ from .entities.contracts import (
     ToolFunction,
     ToolOutcome,
 )
-from .seams.conversation_store import ConversationStore
+from .seams.session_store import SessionStore
 from .entities.events import (
     HistoryChanged,
     AgentEvent,
@@ -87,7 +87,7 @@ from .engine.stream import StreamAccumulator
 from .entities.session import MessageNotFound, Session, TruncationNeedsConsent
 from .tools.registry import DEFAULT_REGISTRY, ROUTE_EXECUTOR, ToolContext, ToolRegistry
 from .tools.on_executor import register_on_executor_package
-from .tools.navigation import register_navigation_tools
+from .tools.navigation import register_package_navigation
 from .tools.ask_user import register_ask_user_question
 from .executor import DispatchLedger, ExecutorLink, InMemoryDispatchLedger
 from .engine.interaction import InteractionRequest
@@ -175,12 +175,12 @@ __all__ = [
     "delivery_to_sse",
     # Extension points
     "LLMStreamClient",
-    "ConversationStore",
+    "SessionStore",
     "ToolExecutor",
     "ToolContext",
     "ToolRegistry",
     "DEFAULT_REGISTRY",
-    "register_navigation_tools",
+    "register_package_navigation",
     "register_ask_user_question",
     "register_on_executor_package",
     "ROUTE_EXECUTOR",

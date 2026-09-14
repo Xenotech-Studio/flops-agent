@@ -25,14 +25,14 @@ from flops_agent.entities.session import (  # noqa: E402
 
 
 def U(mid, text="q", meta=False):
-    m = {"_msg_id": mid, "role": "user", "content": text}
+    m = {"external_id": mid, "role": "user", "content": text}
     if meta:
-        m["isMeta"] = True
+        m["is_system"] = True
     return m
 
 
 def A(mid, text="a", tool_calls=None):
-    m = {"_msg_id": mid, "role": "assistant", "content": text}
+    m = {"external_id": mid, "role": "assistant", "content": text}
     if tool_calls:
         m["tool_calls"] = tool_calls
     return m
@@ -79,7 +79,7 @@ def test_truncate_after_drops_assistant_freely():
     # The normal case for regeneration: only the assistant's reply is dropped, no consent needed
     s = sess(U("u1"), A("a1"))
     assert s.truncate_after("u1") == 1
-    assert [m["_msg_id"] for m in s.messages] == ["u1"]
+    assert [m["external_id"] for m in s.messages] == ["u1"]
     print("test_truncate_after_drops_assistant_freely OK")
 
 
@@ -100,7 +100,7 @@ def test_truncate_after_blocks_when_user_messages_lost():
 def test_truncate_after_proceeds_with_consent():
     s = sess(U("u1"), A("a1"), U("u2"), A("a2"))
     assert s.truncate_after("u1", consent=True) == 3
-    assert [m["_msg_id"] for m in s.messages] == ["u1"]
+    assert [m["external_id"] for m in s.messages] == ["u1"]
     print("test_truncate_after_proceeds_with_consent OK")
 
 
@@ -114,7 +114,7 @@ def test_meta_user_messages_are_not_user_output():
 def test_truncate_before_includes_target():
     s = sess(U("u1"), A("a1"), U("u2"), A("a2"))
     assert s.truncate_before("u2", consent=True) == 2
-    assert [m["_msg_id"] for m in s.messages] == ["u1", "a1"]
+    assert [m["external_id"] for m in s.messages] == ["u1", "a1"]
     print("test_truncate_before_includes_target OK")
 
 
@@ -156,7 +156,7 @@ def test_guard_defaults_off():
     """The switch defaults to off -- a protection that needs product-layer cooperation shouldn't trip up someone who hasn't adopted it."""
     s = Session("c1", messages=[U("u1"), A("a1"), U("u2")])   # off by default
     assert s.truncate_after("u1") == 2          # drops u2 too, without blocking
-    assert [m["_msg_id"] for m in s.messages] == ["u1"]
+    assert [m["external_id"] for m in s.messages] == ["u1"]
     assert Session("c2").guard_user_message_loss is False     # off by default: someone who hasn't adopted it won't be blocked for no reason
     print("test_guard_defaults_off OK")
 

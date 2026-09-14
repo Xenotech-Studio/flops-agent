@@ -47,8 +47,8 @@ DEFAULT_GROUP_DESCRIPTION = (
 DEFAULT_GROUP_PROMPT = """## Executor Local Capabilities (opened)
 
 These are the capabilities of the user's **local device itself**. Sub-package tools are not
-available just because this package is open -- call `open_tool_packages(["<sub-package path>"])`
-first to open the corresponding sub-package, then call its tools. `/tools/on_executor/basic`:
+available just because this package is open -- request that the corresponding sub-package be
+opened first, then call its tools. `/tools/on_executor/basic`:
 read/write local files, list directories, full-text search, run one-off commands (including a
 background long-running mode), and background task management."""
 
@@ -95,7 +95,7 @@ BASIC_TOOLS: List[Dict[str, Any]] = [{'type': 'function',
                               'conversation (stdout/stderr merged into the log file); suitable for long-running tasks that don\'t naturally '
                               'terminate such as visualization processes, dev servers, watchers -- **do not** use background mode for '
                               'short one-off commands. When a background task process ends, its status is automatically reported to you via '
-                              'an isMeta message; use `local_read_file` to read log_path if you want to check output midway; use '
+                              'a system-marked message; use `local_read_file` to read log_path if you want to check output midway; use '
                               '`local_task_stop(task_id)` to stop it; use `local_task_list` to see all currently running background tasks on '
                               'this machine. timeout_seconds has no effect in background mode. **This tool\'s stdin is closed**: it cannot run '
                               'any program that requires input (interactive prompts, passwords, REPLs, ssh sessions all fail outright or hang '
@@ -114,7 +114,7 @@ BASIC_TOOLS: List[Dict[str, Any]] = [{'type': 'function',
                                              'background': {'type': 'boolean',
                                                             'description': 'Optional. true means enable background mode: the process runs '
                                                                            'independently detached from the conversation, the tool returns '
-                                                                           'immediately with {task_id, pid, log_path}, and an isMeta '
+                                                                           'immediately with {task_id, pid, log_path}, and a system-marked '
                                                                            'notification is sent automatically when it ends. Use only for '
                                                                            '**commands expected to run long and that don\'t need stdout '
                                                                            'immediately** (dev server, visualization process, watcher, '
@@ -303,7 +303,7 @@ BASIC_TOOLS: List[Dict[str, Any]] = [{'type': 'function',
                'description': '**Explicitly block** and wait for the specified background task to finish (up to timeout_seconds seconds, '
                               'capped at 180). A task that has already exited returns immediately. On completion, returns final_status / '
                               'exit_code / log_tail, saving a local_read_file call. **Only use this when you genuinely need to wait for the '
-                              'result before deciding the next step**; otherwise stick with the isMeta notification mode. Each wait occupies '
+                              'result before deciding the next step**; otherwise stick with the system-notification mode. Each wait occupies '
                               'a worker-thread slot on the executor -- **keep the number of concurrent waits to 1-2** to avoid blocking other '
                               'local tools.',
                'parameters': {'type': 'object',

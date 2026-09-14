@@ -22,7 +22,7 @@ def _call(name, args=None):
 
 
 def _ctx(reg, name, domains=("/tools", BASIC_PATH)):
-    return ToolContext(user_id="u", conversation_id="s", function_name=name, tool_domains=list(domains), registry=reg)
+    return ToolContext(user_id="u", session_id="s", function_name=name, tool_domains=list(domains), registry=reg)
 
 
 class _Router:

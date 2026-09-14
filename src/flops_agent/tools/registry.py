@@ -50,13 +50,13 @@ class ToolContext:
     """Protocol-level tool call context. Holds only request-scoped generic data, so it can live
     entirely in the framework.
 
-    The product layer's adapter takes protocol fields such as user_id / conversation_id /
+    The product layer's adapter takes protocol fields such as user_id / session_id /
     stream_sink from here; business config (e.g. flowdoc base_url, litellm key) is resolved by
     the adapter calling product helpers directly, and is not put into ctx -- keeping the
     framework free of business-logic contamination.
     """
     user_id: str
-    conversation_id: str
+    session_id: str
     function_name: str
     tool_domains: List[str]
     client_ip: Optional[str] = None
@@ -156,7 +156,7 @@ class ToolRouter(Protocol):
     ) -> ToolOutcome:
         """Dispatch the tool to the executor and return the result (protocol guarantee: an
         executor-routed tool always returns here and never falls back to the registry). Required
-        request context (function_name / tool_domains / user_id / conversation_id / stream_sink)
+        request context (function_name / tool_domains / user_id / session_id / stream_sink)
         is taken from ctx."""
         ...
 

@@ -80,7 +80,7 @@ def test_default_executor_reports_bad_arguments_instead_of_running_empty():
     reg.register_unified_handler("/tools", "echo", echo)
 
     def ctx():
-        return ToolContext(user_id="u", conversation_id="c", function_name="echo", tool_domains=["/tools"], registry=reg)
+        return ToolContext(user_id="u", session_id="s", function_name="echo", tool_domains=["/tools"], registry=reg)
 
     ex = DefaultToolExecutor()
     good = asyncio.run(ex.execute(SN(function=SN(name="echo", arguments='{"a": 1}')), ctx()))

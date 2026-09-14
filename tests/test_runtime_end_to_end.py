@@ -131,8 +131,8 @@ def test_regenerate_is_truncate_plus_run():
     async def go():
         runtime = Runtime(llm=FakeLLM([chunk(content="new answer")]))
         session = Session("s1", messages=[
-            {"_msg_id": "u1", "role": "user", "content": "q"},
-            {"_msg_id": "a1", "role": "assistant", "content": "old answer"},
+            {"external_id": "u1", "role": "user", "content": "q"},
+            {"external_id": "a1", "role": "assistant", "content": "old answer"},
         ])
         session.truncate_after("u1")                  # step one: drop the old answer
         run = runtime.start(session)                  # step two: run with no input

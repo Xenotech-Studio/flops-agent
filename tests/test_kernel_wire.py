@@ -83,7 +83,9 @@ def test_wire_dicts_are_jsonable_with_stable_types():
         json.dumps(wire)                      # must be JSON-serializable (object() falls back to str)
         assert _parse(to_sse(event))["type"] == expect_type
     # Terminal events carry a done flag.
-    assert _parse(to_sse(_ev.LoopFinished()))["done"] is True
+    finished = _parse(to_sse(_ev.LoopFinished(pending_input_count=2)))
+    assert finished["done"] is True
+    assert finished["pending_input_count"] == 2
     assert _parse(to_sse(_ev.Cancelled()))["done"] is True
     # Error does not carry exc (the traceback never goes over the wire).
     assert "exc" not in event_to_wire(_ev.Error("m", exc=ValueError()))

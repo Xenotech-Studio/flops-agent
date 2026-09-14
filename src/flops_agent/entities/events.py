@@ -134,7 +134,9 @@ class LoopFinished:
     """The agent loop terminated normally (LLM returned no tool calls)."""
 
     reason: str = "stop"
-    send_queue_pending: Any = None
+    #: Product-supplied count of inputs still pending after this run. The
+    #: framework does not prescribe how those inputs are queued or delivered.
+    pending_input_count: Any = None
 
 
 @dataclass
