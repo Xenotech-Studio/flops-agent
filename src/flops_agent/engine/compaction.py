@@ -746,6 +746,17 @@ class ProjectionConfig:
                         content = self.trim_user_content(content, ub)
                 out.append({"role": role, "content": content})
                 llm_msg = out[-1]
+                # ``reasoning_content`` lives beside assistant ``content`` in canonical
+                # storage.  Keep exactly one supported alias on the projection so the
+                # product wire layer can apply its provider-specific replay policy.  Do
+                # not copy all aliases: historical records may contain more than one,
+                # and replaying them together would duplicate hidden reasoning.
+                if role == "assistant":
+                    for reasoning_key in ("reasoning_content", "thinking", "reasoning"):
+                        reasoning = msg.get(reasoning_key)
+                        if isinstance(reasoning, str) and reasoning.strip():
+                            llm_msg["reasoning_content"] = reasoning
+                            break
                 if "tool_calls" in msg:
                     llm_msg["tool_calls"] = (
                         self.trim_tool_calls_args(msg["tool_calls"], self.toolcall_args_soft_trim_max_chars)
