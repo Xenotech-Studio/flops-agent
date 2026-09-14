@@ -225,12 +225,12 @@ async def _demo(title: str, llm, text, agent=None):
 
 
 async def main() -> None:
-    # Use the bundled client for a live DeepSeek request when a key is present.
-    key = os.environ.get("DEEPSEEK_API_KEY")
+    # Replace these placeholder values to make a live compatible-provider request.
+    key = os.environ.get("EXAMPLE_PROVIDER_API_KEY")
     if key:
-        await _demo("Live DeepSeek", OpenAIStreamClient(key, model="deepseek-chat", base_url="https://api.deepseek.com"), "Introduce yourself in one sentence.")
+        await _demo("Live provider", OpenAIStreamClient(key, model="example-model", base_url="https://api.example.test/v1"), "Introduce yourself in one sentence.")
     else:
-        print("(Set DEEPSEEK_API_KEY for a live DeepSeek request; using scripted demos below.)")
+        print("(Set EXAMPLE_PROVIDER_API_KEY and replace the sample endpoint values for a live request; using scripted demos below.)")
 
     # Scripted doubles make tool calls, safety gates, and memory deterministic.
     await _demo("Safe tool (scripted)", ScriptedLLM([

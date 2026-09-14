@@ -1,4 +1,4 @@
-"""FLOPS agent framework — tool registry & dispatch protocol.
+"""Tool registry and dispatch protocol for service-oriented agents.
 
 Pure protocol layer: ToolContext, kwargs_adapter, register/get APIs,
 TOOL_REGISTRY, catalog/prompt getters. Contains NO product copy

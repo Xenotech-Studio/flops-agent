@@ -15,13 +15,13 @@ The program prints SSE frames such as \`text_delta\`, tool start and completion,
 
 ## Install and call a real model
 
-The package ships \`OpenAIStreamClient\`, which speaks the OpenAI chat-completions
-streaming protocol (also DeepSeek, OpenRouter, local vLLM, ...). Install the
-provider extra and set a key:
+The package ships \`OpenAIStreamClient\`, which speaks an OpenAI-compatible
+chat-completions streaming protocol. Install the provider extra and set a
+placeholder-named key for your own endpoint:
 
 \`\`\`bash
 pip install -e ".[providers]"
-export DEEPSEEK_API_KEY='your-key'
+export EXAMPLE_PROVIDER_API_KEY='replace-with-your-key'
 \`\`\`
 
 Create \`hello.py\`:
@@ -35,9 +35,9 @@ from flops_agent import Runtime, OpenAIStreamClient
 
 runtime = Runtime(
     llm=OpenAIStreamClient(
-        os.environ["DEEPSEEK_API_KEY"],
-        model="deepseek-chat",
-        base_url="https://api.deepseek.com",
+        os.environ["EXAMPLE_PROVIDER_API_KEY"],
+        model="example-model",
+        base_url="https://api.example.test/v1",
     ),
 )
 
@@ -54,7 +54,9 @@ asyncio.run(main())
 
 Run \`python hello.py\`. Text appears incrementally. \`ask()\` is the convenient one-shot entry point: it creates a temporary \`Session\`, starts a \`Run\`, and hands events to you. It is ideal for a command line program or prototype. A browser or API service should use \`start()\` next, because it also needs a reconnection cursor and a cancellation handle.
 
-With \`DEEPSEEK_API_KEY\` set, the same \`server.py\` also demonstrates a live model call. The scripted portion remains available, which makes the example useful as both a tutorial and a regression fixture.
+Replace the placeholder model and URL with your provider's documented values to
+enable a live model call. The scripted portion remains available, which makes
+the example useful as both a tutorial and a regression fixture.
 
 ## Turn the script into a service
 

@@ -278,7 +278,7 @@ BASIC_TOOLS: List[Dict[str, Any]] = [{'type': 'function',
                'description': 'List all background tasks currently held in the local executor\'s memory (processes started by '
                               'local_exec_command with background=true), including running / exited / killed status. **The registry is kept '
                               'in the executor\'s local memory, and is cleared if the executor process restarts** (this doesn\'t mean the '
-                              'process is gone, only that Flops can no longer see it). Optional running_only shows only tasks still running.',
+                              'process is gone, only that the host can no longer see it). Optional running_only shows only tasks still running.',
                'parameters': {'type': 'object',
                               'properties': {'device_id': {'type': 'string',
                                                            'description': 'Optional. Target executor ID. If omitted, the device bound to the current session is used.'},

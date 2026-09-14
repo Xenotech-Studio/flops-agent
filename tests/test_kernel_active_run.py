@@ -124,7 +124,7 @@ def test_guarded_clear_respects_concurrent_live_run():
 
 
 def test_host_field_name_override():
-    """A host can plug in a legacy field name (e.g. Flops's active_chat_v2_run_id) with zero protocol changes."""
+    """A host can plug in a legacy field name with zero protocol changes."""
     class LegacySession(Session):
         active_run_field = "active_chat_v2_run_id"
         active_run_started_field = "active_chat_v2_run_started_at"

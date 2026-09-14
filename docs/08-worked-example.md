@@ -12,7 +12,8 @@ From the repository root:
     python docs/sample_product/local_executor.py
 
 The first command uses deterministic ScriptedLLM by default, so it needs no
-network or API key. With DEEPSEEK_API_KEY it also demonstrates a real model call.
+network or API key. Set the documented placeholder environment variable and
+replace the sample endpoint values to demonstrate a real model call.
 The second command is a self-contained executor demonstration. frontend.html is
 a minimal browser reference for consuming SSE, saving a cursor, reconnecting, and
 a cancel button; it should not import the Python server.

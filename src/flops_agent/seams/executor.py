@@ -14,13 +14,12 @@ Two implementations:
   arguments and runs it straight through the framework dispatch seam
   (``dispatch_tool``: package gate → route → invoke).  A third-party developer
   gets a working agent with this and nothing else.
-* The product (Flops) injects its own executor that wraps ``server.execute_tool``
-  (which adds tool-name compat, tool_domains resolution, redis injection, ctx
-  construction, executor routing, sensitive-command scanning, streaming relay,
-  … before calling the same ``dispatch_tool``).
+* An embedding application can inject its own executor adapter for remote
+  execution, context construction, routing, policy checks, and streaming relay
+  before calling the same ``dispatch_tool``.
 
-This establishes the seam; the product
-executor still wraps the existing ``execute_tool`` unchanged.
+This establishes the seam without prescribing an application's executor
+implementation.
 """
 from __future__ import annotations
 
