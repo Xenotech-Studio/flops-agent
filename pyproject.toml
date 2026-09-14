@@ -17,8 +17,6 @@ readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 authors = [{name = "Xenotech Studio"}]
 keywords = ["agent", "llm", "framework", "streaming", "sse"]
-# Placeholder: the project owner has not finalized a license yet (see LICENSE).
-# This must be confirmed before any public release or PyPI upload.
 license = {text = "MIT"}
 classifiers = [
     "Development Status :: 4 - Beta",
