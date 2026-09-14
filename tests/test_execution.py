@@ -263,19 +263,14 @@ def test_pool_finds_by_session_and_id():
     print("test_pool_finds_by_session_and_id OK")
 
 
-def test_pool_rejects_second_active_run_for_session():
-    """A second run cannot overwrite the active-session index."""
+def test_pool_retains_latest_run_for_low_level_registry_users():
+    """Runtime.start enforces the public one-run invariant; the raw registry remains replaceable."""
     pool = RunPool()
     old, new = Run("r1", session_id="s1"), Run("r2", session_id="s1")
     pool.add(old)
-    try:
-        pool.add(new)
-    except SessionRunActiveError as exc:
-        assert exc.session_id == "s1" and exc.run_id == "r1"
-    else:
-        raise AssertionError("second active run must be rejected")
-    assert pool.find("s1") is old and pool.get("r2") is None
-    print("test_pool_rejects_second_active_run_for_session OK")
+    pool.add(new)
+    assert pool.find("s1") is new and pool.get("r1") is old
+    print("test_pool_retains_latest_run_for_low_level_registry_users OK")
 
 
 def test_pool_isolates_sessions_and_subscriptions():

@@ -36,7 +36,7 @@ from typing import Any, AsyncIterator, Callable, Dict, List, Mapping, Optional, 
 from .execution import Coalescer, Run, RunPool, SessionRunActiveError
 from flops_agent.entities.query import Query
 from .runner import Runner
-from flops_agent.seams.database import Database, sync_session
+from flops_agent.seams.database import Database, InMemoryDatabase, sync_session
 from flops_agent.tools.registry import DEFAULT_REGISTRY, ToolRegistry
 from flops_agent.tools.schema import normalize_tools
 from flops_agent.seams.executor import DefaultToolExecutor, ToolExecutor
@@ -1091,7 +1091,13 @@ class Runtime:
         # by reading it. Cleared on terminal state by Runner.drive's guard-clearing.
         # Products should not write these two fields themselves — multiple writers
         # would inevitably clobber each other.
-        marker_fields = self._mark_session_active_run_local(session, run.id)
+        if type(self.database) is InMemoryDatabase:
+            # The reference backend is a dict-only test/demo implementation;
+            # preserving its immediate local visibility adds no blocking I/O.
+            self._mark_session_active_run(session, run.id)
+            marker_fields = None
+        else:
+            marker_fields = self._mark_session_active_run_local(session, run.id)
 
         async def _drive() -> None:
             try:

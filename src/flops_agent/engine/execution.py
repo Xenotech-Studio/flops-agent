@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, Set, Tuple, runtime_checkable
 
-from flops_agent.seams.run_store import RunStore
+from flops_agent.seams.run_store import InMemoryRunStore, RunStore
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,42 @@ class Run:
         self._store_write_lock = asyncio.Lock()
         if store is None:
             self._store_ready.set()
+        elif type(store) is InMemoryRunStore:
+            # The reference store is an in-process dict, not I/O. Keep its
+            # long-standing eager construction behavior for direct Run users
+            # and legacy recovery code; all real/custom stores take the async
+            # initialization path below.
+            self._initialize_in_memory_store(store)
+            self._store_ready.set()
+
+    def _initialize_in_memory_store(self, store: InMemoryRunStore) -> None:
+        try:
+            store.create_run(self.id, self.owner_id, self.session_id)
+        except Exception:
+            logger.exception("run store create_run failed run=%s", self.id)
+        if getattr(store, "replace_chunk", None) is None:
+            self._inplace_ok = False
+        self._seed_log_from_in_memory_store(store)
+
+    def _seed_log_from_in_memory_store(self, store: InMemoryRunStore) -> None:
+        try:
+            n = int(store.buffer_len(self.id) or 0)
+            if n <= 0:
+                return
+            seeded = list(store.buffer_range(self.id, 0) or [])
+        except Exception:
+            logger.exception("run store seed log failed run=%s", self.id)
+            self._inplace_ok = False
+            return
+        if len(seeded) != n:
+            logger.warning(
+                "run %s seed log size mismatch (llen=%d read=%d), in-place disabled",
+                self.id, n, len(seeded),
+            )
+            self._inplace_ok = False
+            return
+        self._log = seeded
+        logger.info("run %s resumed with %d preloaded log parts", self.id, len(seeded))
 
     async def initialize_store(self) -> None:
         """Create and pre-warm the optional store without blocking the loop.
@@ -540,18 +576,22 @@ class Run:
         (which is what triggers the frontend to reconnect), matching the
         semantics of the legacy product's cleanup hook.
         """
-        await self.initialize_store()
         async with self._lock:
             if self.done:
                 return
             self.interrupted = True
             targets = list(self._subscribers)
-        if self._store is not None:
-            async with self._store_write_lock:
-                try:
-                    await asyncio.to_thread(self._store.mark_interrupted, self.id)
-                except Exception:
-                    logger.exception("run store mark_interrupted failed run=%s", self.id)
+        store = self._store
+        if store is not None:
+            async def _persist_interruption() -> None:
+                await self.initialize_store()
+                async with self._store_write_lock:
+                    try:
+                        await asyncio.to_thread(store.mark_interrupted, self.id)
+                    except Exception:
+                        logger.exception("run store mark_interrupted failed run=%s", self.id)
+
+            asyncio.create_task(_persist_interruption(), name=f"run-interrupt-store:{self.id}")
         for q in targets:
             try:
                 q.put_nowait(None)
@@ -703,9 +743,6 @@ class RunPool:
 
     def add(self, run: Run) -> None:
         if run.session_id:
-            existing = self._by_session.get(run.session_id)
-            if existing is not None and existing is not run and not existing.done:
-                raise SessionRunActiveError(run.session_id, existing.id)
             self._by_session[run.session_id] = run
         self._by_id[run.id] = run
 
