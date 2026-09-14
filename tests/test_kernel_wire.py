@@ -47,6 +47,12 @@ def test_every_event_class_is_in_wire_table():
         if cls not in WIRE_TYPES:
             missing.append(name)
     assert not missing, f"event classes not registered in WIRE_TYPES: {missing}"
+    # Interaction events are framework events, rather than product-only frames.
+    # Keeping this structural assertion separate protects the typing contract
+    # without changing any established wire bytes.
+    from typing import get_args
+    union_members = set(get_args(_ev.AgentEvent))
+    assert {_ev.InteractionRequested, _ev.InteractionResolved} <= union_members
     # Converse: every class in the table can build a JSON-serializable wire dict
     # (smoke-tested with a minimal-defaults instance).
     print("test_every_event_class_is_in_wire_table OK")
@@ -65,6 +71,8 @@ def test_wire_dicts_are_jsonable_with_stable_types():
         (_ev.StepCompleted(3), "step_completed"),
         (_ev.LoopFinished("stop", 2), "loop_finished"),
         (_ev.Suspended({"kind": "ask"}), "suspended"),
+        (_ev.InteractionRequested("ask_user_question", 0, "ask_user_question", "c1", {"questions": []}), "interaction_requested"),
+        (_ev.InteractionResolved("ask_user_question", "ask_user_question", "c1", {"answers": []}), "interaction_resolved"),
         (_ev.Cancelled(), "cancelled"),
         (_ev.Error("boom", exc=ValueError("x")), "error"),
         (_ev.HistoryChanged(5, message_count=10), "history_changed"),

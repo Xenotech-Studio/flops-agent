@@ -241,6 +241,8 @@ AgentEvent = (
     | StepCompleted
     | LoopFinished
     | Suspended
+    | InteractionRequested
+    | InteractionResolved
     | Cancelled
     | Error
     | LLMStreamRetrying
