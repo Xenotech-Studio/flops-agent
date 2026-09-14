@@ -23,6 +23,16 @@ The ``engine``, ``entities``, ``seams``, ``providers``, ``crypto``, and
 """
 
 from .providers.openai import OpenAIStreamClient
+from .entities.contracts import (
+    FinishStreamChunk,
+    ReasoningStreamChunk,
+    StreamChunk,
+    TextStreamChunk,
+    ToolCall,
+    ToolCallStreamChunk,
+    ToolFunction,
+    ToolOutcome,
+)
 from .seams.conversation_store import ConversationStore
 from .entities.events import (
     HistoryChanged,
@@ -55,7 +65,7 @@ from .seams.llm_client import LLMStreamClient
 from .entities.agent import Agent, Memory
 from .seams.database import Database, InMemoryDatabase, sync_session
 from .seams.inbox import Inbox, MemoryInbox
-from .seams.run_store import RunStore, InMemoryRunStore
+from .seams.run_store import RunMeta, RunStore, InMemoryRunStore
 from .safety import Inspector, Review, Rule, Verdict, fallback_decision, scan
 from .engine.interaction import Interaction, InteractionKind, StepPlan, UNSET
 from .engine.execution import (
@@ -105,6 +115,7 @@ __all__ = [
     "Database",
     "RunStore",
     "InMemoryRunStore",
+    "RunMeta",
     "InMemoryDatabase",
     "sync_session",
     "Inbox",
@@ -124,6 +135,15 @@ __all__ = [
     "Contributor",
     "MessageNotFound",
     "TruncationNeedsConsent",
+    # Typed extension contracts
+    "ToolFunction",
+    "ToolCall",
+    "TextStreamChunk",
+    "ReasoningStreamChunk",
+    "ToolCallStreamChunk",
+    "FinishStreamChunk",
+    "StreamChunk",
+    "ToolOutcome",
     # Events
     "AgentEvent",
     "TextDelta",
