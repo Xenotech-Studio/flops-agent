@@ -257,10 +257,16 @@ class Session:
         self.meta[self.opened_packages_field] = list(paths)
 
     @classmethod
-    def opened_packages_from_history(cls, messages: List[Dict[str, Any]]) -> List[str]:
+    def opened_packages_from_history(
+        cls,
+        messages: List[Dict[str, Any]],
+        *,
+        open_action_name: Optional[str] = None,
+        close_action_name: Optional[str] = None,
+    ) -> List[str]:
         """Replay product-defined package actions to reconstruct package state."""
-        open_action = cls.open_package_action_name
-        close_action = cls.close_package_action_name
+        open_action = open_action_name or cls.open_package_action_name
+        close_action = close_action_name or cls.close_package_action_name
         if not open_action or not close_action:
             return []
         opened: set[str] = set()

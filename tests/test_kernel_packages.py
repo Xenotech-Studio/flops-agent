@@ -119,11 +119,12 @@ def test_replay_opened_packages_from_history():
         {"role": "assistant", "tool_calls": [{"function": {"name": "close_packages", "arguments": {"package_paths": "/tools/a"}}}]},
         {"role": "assistant", "tool_calls": [{"function": {"name": "open_packages", "arguments": "not json"}}]},
     ]
-    class PackageSession(Session):
-        open_package_action_name = "open_packages"
-        close_package_action_name = "close_packages"
-
-    assert PackageSession.opened_packages_from_history(hist) == ["/tools/b"]
+    assert Session.opened_packages_from_history(hist) == []
+    assert Session.opened_packages_from_history(
+        hist,
+        open_action_name="open_packages",
+        close_action_name="close_packages",
+    ) == ["/tools/b"]
     print("test_replay_opened_packages_from_history OK")
 
 
