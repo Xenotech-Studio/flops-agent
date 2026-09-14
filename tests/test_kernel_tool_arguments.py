@@ -84,10 +84,10 @@ def test_default_executor_reports_bad_arguments_instead_of_running_empty():
 
     ex = DefaultToolExecutor()
     good = asyncio.run(ex.execute(SN(function=SN(name="echo", arguments='{"a": 1}')), ctx()))
-    assert good == {"ok": True, "got": {"a": 1}} and seen == [{"a": 1}]
+    assert good.value == {"ok": True, "got": {"a": 1}} and good.ok and seen == [{"a": 1}]
 
     bad = asyncio.run(ex.execute(SN(function=SN(name="echo", arguments='{"a": ')), ctx()))
-    assert bad["success"] is False and bad["arguments_fail_kind"] == FAIL_TRUNCATED
+    assert bad.value["success"] is False and bad.value["arguments_fail_kind"] == FAIL_TRUNCATED and not bad.ok
     assert len(seen) == 1, "bad arguments must not reach the handler"
     print("test_default_executor_reports_bad_arguments_instead_of_running_empty OK")
 

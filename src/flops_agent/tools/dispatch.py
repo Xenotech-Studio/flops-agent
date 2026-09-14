@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import logging
 import traceback
-from typing import Any, Dict, Optional
+from typing import Optional
+
+from flops_agent.entities.contracts import ToolArguments, ToolCall
 
 from .registry import (
     DEFAULT_REGISTRY,
@@ -25,9 +27,9 @@ logger = logging.getLogger("flops_agent.tools.dispatch")
 
 
 async def dispatch_tool(
-    tool_call: Any, arguments: Dict[str, Any], ctx: ToolContext, *,
+    tool_call: ToolCall, arguments: ToolArguments, ctx: ToolContext, *,
     router: Optional[ToolRouter] = None,
-) -> Any:
+) -> object:
     """package gate → route → invoke.
 
     - If the registry says this tool is registered to run on the executor

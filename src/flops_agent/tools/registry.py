@@ -26,6 +26,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Protocol, Set, cast, runtime_checkable
 
+from flops_agent.entities.contracts import DispatchRecord, ToolArguments, ToolCall, ToolOutcome
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,9 +78,9 @@ class ToolContext:
     #: via :meth:`record_dispatch`). None = a normal first-time dispatch.
     #: The remote executor uses this to reuse the old task id instead of resending -- resending
     #: would mean duplicate execution.
-    resume_of: Optional[Dict[str, Any]] = None
+    resume_of: Optional[DispatchRecord] = None
 
-    def record_dispatch(self, **fields: Any) -> None:
+    def record_dispatch(self, **fields: object) -> None:
         """Merge dispatch facts (remote task_id, target device, etc.) into this call's dispatch record.
 
         If the process dies during tool execution, the resumed run retrieves these fields via
@@ -149,7 +151,9 @@ class ToolRouter(Protocol):
         """(Optional) An additional check beyond the registry: should this tool also go to the executor."""
         ...
 
-    async def dispatch_to_executor(self, tool_call: Any, arguments: Any, ctx: "ToolContext") -> Any:
+    async def dispatch_to_executor(
+        self, tool_call: ToolCall, arguments: ToolArguments, ctx: "ToolContext",
+    ) -> ToolOutcome:
         """Dispatch the tool to the executor and return the result (protocol guarantee: an
         executor-routed tool always returns here and never falls back to the registry). Required
         request context (function_name / tool_domains / user_id / conversation_id / stream_sink)

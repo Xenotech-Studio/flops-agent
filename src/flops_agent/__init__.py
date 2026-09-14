@@ -25,10 +25,13 @@ The ``engine``, ``entities``, ``seams``, ``providers``, ``crypto``, and
 from .providers.openai import OpenAIStreamClient
 from .entities.contracts import (
     FinishStreamChunk,
+    DispatchRecord,
+    OpenAIToolCall,
     ReasoningStreamChunk,
     StreamChunk,
     TextStreamChunk,
     ToolCall,
+    ToolArguments,
     ToolCallStreamChunk,
     ToolFunction,
     ToolOutcome,
@@ -138,6 +141,9 @@ __all__ = [
     # Typed extension contracts
     "ToolFunction",
     "ToolCall",
+    "OpenAIToolCall",
+    "ToolArguments",
+    "DispatchRecord",
     "TextStreamChunk",
     "ReasoningStreamChunk",
     "ToolCallStreamChunk",

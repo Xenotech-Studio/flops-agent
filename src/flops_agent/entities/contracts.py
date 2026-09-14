@@ -7,12 +7,14 @@ OpenAI-compatible wire details (including DeepSeek's) outside the public API.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, TypedDict
 
 
 JSONScalar: TypeAlias = None | bool | int | float | str
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 JSONMapping: TypeAlias = dict[str, JSONValue]
+ToolArguments: TypeAlias = dict[str, object]
+DispatchRecord: TypeAlias = dict[str, object]
 
 
 @dataclass
@@ -35,6 +37,14 @@ class ToolCall:
     id: str | None = None
     function: ToolFunction = field(default_factory=ToolFunction)
     type: Literal["function"] = "function"
+
+
+class OpenAIToolCall(TypedDict):
+    """The persisted OpenAI-compatible representation of :class:`ToolCall`."""
+
+    id: str | None
+    type: Literal["function"]
+    function: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -103,8 +113,11 @@ __all__ = [
     "JSONScalar",
     "JSONValue",
     "JSONMapping",
+    "ToolArguments",
+    "DispatchRecord",
     "ToolFunction",
     "ToolCall",
+    "OpenAIToolCall",
     "TextStreamChunk",
     "ReasoningStreamChunk",
     "ToolCallStreamChunk",

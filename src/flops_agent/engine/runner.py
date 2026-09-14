@@ -50,7 +50,8 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, cast, Set
 
 from flops_agent.entities import events as _ev
-from flops_agent.entities.contracts import FinishStreamChunk, JSONMapping, StreamChunk, ToolCall
+from flops_agent.entities.contracts import FinishStreamChunk, JSONMapping, StreamChunk, ToolCall, ToolOutcome
+from flops_agent.tools.registry import ToolContext
 from flops_agent.seams.database import sync_session
 from .execution import Run, RunStatus
 from .interaction import UNSET, Interaction, InteractionKind, InteractionRequest, StepPlan, ToolAction, ToolGate
@@ -64,6 +65,12 @@ if TYPE_CHECKING:  # For static analysis only: runtime.py imports this module ba
     from .runtime import Runtime
 
 logger = logging.getLogger(__name__)
+
+
+def _result_has_error(result: object) -> bool:
+    """Preserve the historical ``{"error": ...}`` failure convention."""
+    record = cast(Dict[str, object], result) if isinstance(result, dict) else {}
+    return record.get("error") is not None
 
 
 #: Silent-reply rescue: the trailing nudge template for the system fallback channel
@@ -480,7 +487,7 @@ class Runner:
         the wire layer (the product layer maps that event in to_sse).
         """
 
-    async def handle_tool_call(self, index: int, call: Any) -> bool:
+    async def handle_tool_call(self, index: int, call: ToolCall) -> bool:
         """One tool call: gate -> execute (streaming) -> interaction -> shape -> write back.
 
         Returns ``False`` to signal that **this run has suspended** (stopped
@@ -495,11 +502,15 @@ class Runner:
             return False
         if gate.action is ToolAction.DENY:
             result = gate.result
+            outcome_ok = not _result_has_error(result)
         else:
-            call = gate.effective_call or call
+            effective_call = gate.effective_call
+            call = cast(ToolCall, effective_call) if effective_call is not None else call
             await self.emit(_ev.ToolExecuting(index))
             await self.on_tool_executing(call, index)
-            result = await self._execute_streaming(call, index)
+            outcome = await self._execute_streaming(call, index)
+            result = outcome.value
+            outcome_ok = outcome.ok
 
             # The tool may not have produced a final result at all, but instead
             # "needs a human to decide"; the product layer can swap it for a plain
@@ -527,12 +538,12 @@ class Runner:
         message = await self.build_tool_message(call, result)
         if message is not None:
             self.session.append(message)
-        ok = not (isinstance(result, dict) and cast(Dict[str, Any], result).get("error"))
+        ok = outcome_ok and not _result_has_error(result)
         await self.emit(_ev.ToolResult(index, call.function.name, result, ok=ok))
         await self.on_tool_result(call, result, index)
         return True
 
-    async def _execute_streaming(self, call: Any, index: int) -> Any:
+    async def _execute_streaming(self, call: ToolCall, index: int) -> ToolOutcome:
         """Execute one call; any deltas the tool pushes through ``stream_sink``
         during execution are forwarded one by one as ``ToolResultDelta``.
 
@@ -543,12 +554,15 @@ class Runner:
         exception doesn't blow up the whole run — it's folded into
         ``{"error": …}`` and handed back to the model.
         """
-        queue: "asyncio.Queue[Any]" = asyncio.Queue()
+        queue: "asyncio.Queue[object]" = asyncio.Queue()
         end = object()
 
-        async def _run() -> Any:
+        async def _run() -> ToolOutcome:
             try:
-                return await self.execute_tool(call, stream_sink=queue.put_nowait)
+                result = await self.execute_tool(call, stream_sink=queue.put_nowait)
+                if isinstance(result, ToolOutcome):
+                    return result
+                return ToolOutcome(result, ok=not _result_has_error(result))
             finally:
                 queue.put_nowait(end)
 
@@ -557,12 +571,12 @@ class Runner:
             delta = await queue.get()
             if delta is end:
                 break
-            await self.emit(_ev.ToolResultDelta(index, delta))
+            await self.emit(_ev.ToolResultDelta(index, cast(Dict[str, Any], delta)))
         try:
             return await task
         except Exception as e:                      # noqa: BLE001 —— a tool failure shouldn't blow up the whole run
             logger.exception("tool %s failed", call.function.name)
-            return {"error": str(e)}
+            return ToolOutcome({"error": str(e)}, ok=False)
 
     async def on_interaction_request(self, call: Any, index: int, req: InteractionRequest) -> Any:
         """A tool wants to ask a human, right before suspending. Override point:
@@ -1343,7 +1357,7 @@ class Runner:
             parts.append(new_reasoning)
         self.reasoning_text = "\n\n".join(parts)
 
-    async def before_tool(self, call: Any) -> ToolGate:
+    async def before_tool(self, call: ToolCall) -> ToolGate:
         """The gate before tool execution (:class:`ToolGate`): allow / rewrite the
         call / deny with a substitute result / suspend this run.
 
@@ -1352,18 +1366,16 @@ class Runner:
         """
         return ToolGate.proceed()
 
-    async def execute_tool(self, call: Any, *, stream_sink: Any = None) -> Any:
+    async def execute_tool(self, call: ToolCall, *, stream_sink: Any = None) -> object:
         """Actually execute one tool call. ``stream_sink`` is the callback the
         tool uses to push deltas (the framework turns these into
         ``ToolResultDelta``)."""
         return await self.runtime.executor.execute(call, self.tool_context(call, stream_sink))
 
-    def tool_context(self, call: Any, stream_sink: Any = None) -> Any:
+    def tool_context(self, call: ToolCall, stream_sink: Any = None) -> ToolContext:
         """Build the context handed to the executor. The product layer can add
         its own dimensions here."""
-        from flops_agent.tools.registry import ToolContext
-
-        tcid = str(getattr(call, "id", "") or "") or None
+        tcid = call.id or None
         return ToolContext(
             user_id=self.session.owner_id,
             conversation_id=self.session.session_id,
@@ -1378,15 +1390,15 @@ class Runner:
             resume_of=self.resuming.get(tcid) if tcid else None,
         )
 
-    async def after_tool(self, call: Any, result: Any) -> Any:
+    async def after_tool(self, call: ToolCall, result: object) -> object:
         """Shape the result."""
         return result
 
-    async def build_tool_message(self, call: Any, result: Any) -> Optional[Dict[str, Any]]:
+    async def build_tool_message(self, call: ToolCall, result: object) -> Optional[Dict[str, Any]]:
         """Tool result -> the message written back into history."""
         return {
             "role": "tool",
-            "tool_call_id": getattr(call, "id", None),
+            "tool_call_id": call.id,
             "content": result_to_content(result),
             self.session.id_field: f"msg_{uuid.uuid4().hex[:12]}",
         }

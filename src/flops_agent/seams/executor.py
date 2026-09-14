@@ -25,8 +25,9 @@ executor still wraps the existing ``execute_tool`` unchanged.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
+from flops_agent.entities.contracts import ToolCall, ToolOutcome
 from flops_agent.tools.registry import ToolContext, ToolRouter
 from flops_agent.tools.dispatch import dispatch_tool
 from flops_agent.tools.schema import parse_tool_arguments
@@ -34,19 +35,22 @@ from flops_agent.tools.schema import parse_tool_arguments
 logger = logging.getLogger(__name__)
 
 
+def _has_error(value: object) -> bool:
+    return isinstance(value, dict) and "error" in value
+
+
 @runtime_checkable
 class ToolExecutor(Protocol):
     """Runs one assembled tool call and returns its result object."""
 
-    async def execute(self, call: Any, ctx: ToolContext) -> Any:
+    async def execute(self, call: ToolCall, ctx: ToolContext) -> ToolOutcome:
         ...
 
 
 class DefaultToolExecutor:
     """Zero-injection executor: dispatch the call through the framework registry.
 
-    ``call`` is any object exposing ``.function.name`` / ``.function.arguments``
-    (OpenAI/LiteLLM tool-call shape).  ``ctx.function_name`` and
+    ``call`` is the provider-neutral :class:`ToolCall`. ``ctx.function_name`` and
     ``ctx.tool_domains`` drive dispatch; an optional ``router`` decides
     executor-routed tools (``None`` → everything runs against the registry).
     """
@@ -54,8 +58,8 @@ class DefaultToolExecutor:
     def __init__(self, *, router: Optional[ToolRouter] = None):
         self._router = router
 
-    async def execute(self, call: Any, ctx: ToolContext) -> Any:
-        parsed = parse_tool_arguments(getattr(call.function, "arguments", None))
+    async def execute(self, call: ToolCall, ctx: ToolContext) -> ToolOutcome:
+        parsed = parse_tool_arguments(call.function.arguments)
         if not parsed.ok:
             # Do not silently turn malformed arguments into an empty dict: that
             # may run the tool with a more dangerous “not provided” meaning.
@@ -63,13 +67,16 @@ class DefaultToolExecutor:
             logger.warning(
                 "tool %s: bad arguments (%s): %s", ctx.function_name, parsed.fail_kind, parsed.error,
             )
-            return {
+            return ToolOutcome({
                 "success": False,
                 "error": f"Tool arguments are not valid JSON ({parsed.fail_kind}): {parsed.error}",
                 "tool_name": ctx.function_name,
                 "arguments_fail_kind": parsed.fail_kind,
-            }
-        return await dispatch_tool(call, parsed.arguments, ctx, router=self._router)
+            }, ok=False)
+        result = await dispatch_tool(call, parsed.arguments, ctx, router=self._router)
+        if isinstance(result, ToolOutcome):
+            return result
+        return ToolOutcome(result, ok=not _has_error(result))
 
 
 __all__ = ["ToolExecutor", "DefaultToolExecutor", "ToolContext"]

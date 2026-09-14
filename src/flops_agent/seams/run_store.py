@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Dict, List, Mapping, Optional, Protocol, runtime_checkable
+
+from flops_agent.entities.contracts import DispatchRecord
 
 
 @runtime_checkable
@@ -65,7 +67,7 @@ class RunStore(Protocol):
         """Optionally delete all persisted state for a run."""
         ...
 
-    def get_meta(self, run_id: str) -> Optional[Any]:
+    def get_meta(self, run_id: str) -> Optional["RunMeta"]:
         """Run metadata (owner, session, status, times), or ``None``."""
         ...
 
@@ -79,11 +81,11 @@ class RunStore(Protocol):
 
     # ── Optional dispatch records for tool calls sent but not yet completed ───
 
-    def record_dispatch(self, run_id: str, tool_call_id: str, record: Dict[str, Any]) -> None:
+    def record_dispatch(self, run_id: str, tool_call_id: str, record: Mapping[str, object]) -> None:
         """Optionally record or merge-update a dispatch record."""
         ...
 
-    def pending_dispatches(self, run_id: str) -> Dict[str, Dict[str, Any]]:
+    def pending_dispatches(self, run_id: str) -> Dict[str, DispatchRecord]:
         """Optionally return this run's outstanding dispatch records."""
         ...
 
@@ -117,7 +119,7 @@ class InMemoryRunStore:
         self._meta: Dict[str, RunMeta] = {}
         self._stop: set[str] = set()
         self._latest: Dict[tuple[str, str], str] = {}
-        self._dispatches: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self._dispatches: Dict[str, Dict[str, DispatchRecord]] = {}
 
     # Log segments and terminal state
     def create_run(self, run_id: str, owner_id: str, session_id: str) -> None:
@@ -184,10 +186,10 @@ class InMemoryRunStore:
         self._dispatches.pop(run_id, None)
 
     # Dispatch records
-    def record_dispatch(self, run_id: str, tool_call_id: str, record: Dict[str, Any]) -> None:
+    def record_dispatch(self, run_id: str, tool_call_id: str, record: Mapping[str, object]) -> None:
         self._dispatches.setdefault(run_id, {}).setdefault(tool_call_id, {}).update(record)
 
-    def pending_dispatches(self, run_id: str) -> Dict[str, Dict[str, Any]]:
+    def pending_dispatches(self, run_id: str) -> Dict[str, DispatchRecord]:
         return {k: dict(v) for k, v in self._dispatches.get(run_id, {}).items()}
 
     def clear_dispatches(self, run_id: str) -> None:

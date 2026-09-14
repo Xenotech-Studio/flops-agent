@@ -4,8 +4,14 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import dataclass
-from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, cast
+
+from flops_agent.entities.contracts import OpenAIToolCall, ToolArguments, ToolCall, ToolFunction
+
+
+def _object_mapping(value: object) -> Mapping[str, object]:
+    """Narrow an untrusted history value to the mapping contract."""
+    return cast(Mapping[str, object], value) if isinstance(value, dict) else {}
 
 
 def normalize_tools(tools: List[Any]) -> Tuple[List[Dict[str, Any]], Dict[str, Callable[..., Any]]]:
@@ -57,25 +63,24 @@ def schema_from_callable(fn: Callable[..., Any], name: str) -> Dict[str, Any]:
     }
 
 
-def tool_call_from_dict(d: Dict[str, Any]) -> Any:
+def tool_call_from_dict(d: Mapping[str, object]) -> ToolCall:
     """Convert an OpenAI tool_call history dict into the loop's call object.
 
     This is the inverse of ``tool_call_to_openai``: on resumed dispatch, it makes the final
     assistant message's tool_calls dispatchable again.
     """
-    fn_raw = d.get("function")
-    fn: Dict[str, Any] = cast(Dict[str, Any], fn_raw) if isinstance(fn_raw, dict) else {}
+    fn = _object_mapping(d.get("function"))
     args = fn.get("arguments")
     if not isinstance(args, str):
         args = json.dumps(args, ensure_ascii=False) if args else "{}"
-    return SimpleNamespace(
-        id=d.get("id"),
-        type=d.get("type") or "function",
-        function=SimpleNamespace(name=str(fn.get("name") or ""), arguments=args),
+    raw_id = d.get("id")
+    return ToolCall(
+        id=raw_id if isinstance(raw_id, str) else None,
+        function=ToolFunction(name=str(fn.get("name") or ""), arguments=args),
     )
 
 
-def tool_call_to_openai(tc: Any) -> Dict[str, Any]:
+def tool_call_to_openai(tc: ToolCall) -> OpenAIToolCall:
     """Convert a call accumulated from the stream into an OpenAI tool_call history dict."""
     return {
         "id": getattr(tc, "id", None),
@@ -84,7 +89,7 @@ def tool_call_to_openai(tc: Any) -> Dict[str, Any]:
     }
 
 
-def result_to_content(result: Any) -> str:
+def result_to_content(result: object) -> str:
     """Convert a tool return value to message content (strings unchanged; everything else JSON)."""
     if isinstance(result, str):
         return result
@@ -113,7 +118,7 @@ FAIL_TRUNCATED = "truncated"      # Unbalanced delimiters: incomplete tail, typi
 class ParsedArguments:
     """Result of a tool-argument parse. ``arguments`` is empty when ``ok`` is false."""
 
-    arguments: Dict[str, Any]
+    arguments: ToolArguments
     ok: bool = True
     #: Failure classification (one of ``FAIL_*``); empty on success.
     fail_kind: str = ""
@@ -123,7 +128,7 @@ class ParsedArguments:
     repaired: bool = False
 
 
-def parse_tool_arguments(raw: Any) -> ParsedArguments:
+def parse_tool_arguments(raw: object) -> ParsedArguments:
     """Convert ``function.arguments`` to an argument dict, with a failure classification.
 
     Accept dictionaries unchanged (some providers supply objects directly). Parse strings,
@@ -131,7 +136,7 @@ def parse_tool_arguments(raw: Any) -> ParsedArguments:
     ``truncated`` from ``invalid_json``. Empty strings and None are successful empty arguments.
     """
     if isinstance(raw, dict):
-        return ParsedArguments(dict(cast(Dict[str, Any], raw)))
+        return ParsedArguments(dict(cast(ToolArguments, raw)))
     if raw is None:
         return ParsedArguments({})
     if not isinstance(raw, str):
@@ -149,12 +154,12 @@ def parse_tool_arguments(raw: Any) -> ParsedArguments:
             except Exception:
                 fixed = None
             if isinstance(fixed, dict):
-                return ParsedArguments(cast(Dict[str, Any], fixed), error=str(exc), repaired=True)
+                return ParsedArguments(cast(ToolArguments, fixed), error=str(exc), repaired=True)
         kind = FAIL_INVALID_JSON if json_brackets_balanced(text) else FAIL_TRUNCATED
         return ParsedArguments({}, ok=False, fail_kind=kind, error=str(exc))
     if not isinstance(obj, dict):
         return ParsedArguments({}, ok=False, fail_kind=FAIL_NOT_OBJECT, error="arguments is not a JSON object")
-    return ParsedArguments(cast(Dict[str, Any], obj))
+    return ParsedArguments(cast(ToolArguments, obj))
 
 
 def json_brackets_balanced(s: str) -> bool:
