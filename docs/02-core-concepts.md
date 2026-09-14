@@ -83,6 +83,6 @@ A model call is therefore one step, not necessarily one run. A run can contain m
 
 The framework owns general lifecycle mechanics: background execution and subscriptions, events, session writes, cancellation checkpoints, suspension and resume orchestration, reconnect logs, and standard SSE. Products provide deployment facts: a model vendor, database, remote executor, authentication, HTTP routes, tool copy, and safety policy.
 
-A useful test is: would a third party building a non-Flops agent still need a browser disconnect not to stop a long-running tool? That belongs in the framework. Flops membership permissions belong in the product.
+A useful test is: would a third party building an independent agent still need a browser disconnect not to stop a long-running tool? That belongs in the framework. Membership permissions belong in the product.
 
 Next: [Streaming and SSE](03-streaming-and-sse.md).

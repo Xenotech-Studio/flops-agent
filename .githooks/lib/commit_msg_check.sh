@@ -63,7 +63,7 @@ if [[ "$title" =~ $bang_head ]] && \
         echo "  Official format (as the first line of a footer, one space after the colon):"
         echo "    chore!: remove legacy config loading"
         echo ""
-        echo "    BREAKING CHANGE: .flopsrc is no longer supported, migrate to the new format"
+        echo "    BREAKING CHANGE: .agentrc is no longer supported, migrate to the new format"
         echo "  In an emergency you can skip this with git commit --no-verify (not recommended)."
     } >&2
     exit 1
@@ -85,7 +85,7 @@ bump_re="${type_head}[Bb][Uu][Mm][Pp]([^[:alnum:]]|$)"
 #    use chore(release) or similar instead.
 # 2) Every changed submodule must be listed as "name → new-short-SHA" (name is
 #    the last path segment; nested ones may write "parent-dir space last-segment",
-#    e.g. FlopsWeb cocoder-ui-core); the short SHA must be a genuine prefix
+#    e.g. web-client ui-core); the short SHA must be a genuine prefix
 #    (>=7 chars) of that submodule's new pointer. The title must end with
 #    parentheses describing what changed in the updated submodule(s) — multiple
 #    submodules can share one set of parentheses.
@@ -109,7 +109,7 @@ gitlink_changes() {
     fi
 }
 
-example='chore: bump FlopsDesktop → 15f70f9, FlopsWeb cocoder-ui-core → 1f05e00, flops-chat-ui → 1b0fab3 (load local images in md preview)'
+example='chore: bump desktop-client → 15f70f9, web-client ui-core → 1f05e00, chat-ui → 1b0fab3 (load local images in md preview)'
 
 seen_gitlink=0
 problems=""

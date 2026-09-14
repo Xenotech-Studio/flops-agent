@@ -1,4 +1,4 @@
-"""FLOPS agent framework: an installable runtime for service-oriented agents.
+"""An installable runtime for service-oriented agents.
 
 This module is the public contract. Names exported here are the supported API;
 all other implementation details may be refactored freely.

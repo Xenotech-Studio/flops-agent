@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "flops-agent"
 dynamic = ["version"]
-description = "FLOPS agent kernel — a service-style agent loop (runs, sessions, tools, suspension, recovery)"
+description = "Service-style agent kernel for runs, sessions, tools, suspension, and recovery"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 authors = [{name = "Xenotech Studio"}]
@@ -39,10 +39,12 @@ Homepage = "https://github.com/Xenotech-Studio/flops-agent"
 Repository = "https://github.com/Xenotech-Studio/flops-agent"
 
 [project.optional-dependencies]
-# Bundled starter LLM client (SampleDeepseekClient, using the OpenAI protocol).
+# Bundled OpenAI-compatible streaming client.
 providers = ["httpx>=0.24"]
-# Tooling needed to verify this repository without the Flops monorepo.
+# Tooling needed to verify this repository.
 test = ["pytest>=8"]
+# Complete local development environment. Pyright itself is installed by `npm ci`.
+dev = ["pytest>=8", "httpx>=0.24"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,8 +1,7 @@
 """Unit tests for the Runner extension points -- whether the five gaps were actually closed.
 
 These five are the things that didn't fit anywhere when "claiming" the 33
-existing hooks one by one (see the claim table in
-conversation_system/flops_runner.py). Once filled in, it must be proven that a
+existing hooks one by one (see the extension-point inventory). Once filled in, it must be proven that a
 product can express the original behavior through them, rather than working
 around the gap with a hack.
 

@@ -33,10 +33,12 @@ and not framework material — see [api_surface.md](api_surface.md).
 For active framework work, read only [TODO.md](TODO.md). It is the sole todo
 source; this series does not duplicate it.
 
+Release notes are maintained in [CHANGELOG.md](CHANGELOG.md).
+
 ## Scope of this guide
 
 “Framework” here means flops_agent. The embedding application is the product
-layer. Ask whether a third party building a non-Flops agent also needs a feature:
+layer. Ask whether a third party building an independent agent also needs a feature:
 general runtime mechanics belong in the framework; HTTP routes, accounts, tool
 catalogs, provider choice, and safety thresholds are product policy.
 

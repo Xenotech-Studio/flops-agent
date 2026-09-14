@@ -56,4 +56,4 @@ authentication and authorization, key acquisition, session reconstruction,
 deployment routing, device directories, and business-specific tool policy.
 
 The decision rule remains simple: a capability belongs in the framework only if a
-third party building a non-Flops agent would also need it.
+third party building an independent agent would also need it.

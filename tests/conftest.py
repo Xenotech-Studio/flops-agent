@@ -1,6 +1,6 @@
 """Standalone test configuration.
 
-The suite deliberately does not add the Flops monorepo's ``backend/`` directory
+The suite deliberately does not add an embedding application's source directory
 to ``sys.path``. Install this checkout first (for example,
 ``pip install -e .[test,providers]``) so tests exercise the distributable
 package boundary.
