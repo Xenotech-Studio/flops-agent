@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# commit 消息内容校验：规则本体在 lib/commit_msg_check.sh，与 CI 共用同一套。
+source "$(git rev-parse --show-toplevel)/scripts/git-hooks/lib/personal_extension.sh"
+# 个人扩展收到：$1=commit-msg，$2=本 hook 的消息文件路径。
+if flops_run_personal_hook commit-msg gate "$@"; then :; else rc=$?; exit "$rc"; fi
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/scripts/git-hooks/lib/commit_msg_check.sh" "$1" --cached
