@@ -52,7 +52,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, cast, Set
 from flops_agent.entities import events as _ev
 from flops_agent.entities.contracts import FinishStreamChunk, JSONMapping, StreamChunk, ToolCall, ToolOutcome
 from flops_agent.tools.registry import ToolContext
-from flops_agent.seams.database import sync_session
 from .execution import Run, RunStatus
 from .interaction import UNSET, Interaction, InteractionKind, InteractionRequest, StepPlan, ToolAction, ToolGate
 from .stream import StreamAccumulator
@@ -252,7 +251,9 @@ class Runner:
         # status, so a guard checking liveness gets an accurate read). The
         # decision uses suspend_marker rather than status — it's the direct signal
         # for whether we're suspended.
-        self.runtime.settle_session_markers(self.session, self.run.id, self.suspend_marker)
+        await self.runtime.settle_session_markers_async(
+            self.session, self.run.id, self.suspend_marker
+        )
         await self._safe_on_run_end(status)
         return status
 
@@ -765,7 +766,7 @@ class Runner:
             cut_at = self.session.truncate_tool_calls_after(tcid)
             if cut_at is not None:
                 await self.persist_message(cut_at)
-        self.runtime.mark_session_suspended(self.session, marker)
+        await self.runtime.mark_session_suspended_async(self.session, marker)
         await self.on_interaction_requested(req, call, index)
         await self.emit(_ev.InteractionRequested(
             kind=req.kind, index=index, tool_name=call.function.name, tool_call_id=tcid, payload=dict(req.payload),
@@ -897,15 +898,8 @@ class Runner:
         suspend truncation) -> rewrite just that entry. ``persist``'s diff sync
         only looks at the count and the last entry; a mid-history edit must be
         persisted on the spot by whoever made the edit."""
-        database = self.runtime.database
-        replace = getattr(database, "replace_message", None)   # An optional method in the protocol
-        if database is None or replace is None or not (0 <= index < len(self.session.messages)):
-            return
         try:
-            await asyncio.to_thread(
-                replace, self.session.session_id, index, self.session.messages[index],
-                owner_id=self.session.owner_id, keys=self.keys,
-            )
+            await self.runtime.replace_session_message(self.session, index, keys=self.keys)
         except Exception:
             logger.exception("persist_message failed session=%s index=%s", self.session.session_id, index)
 
@@ -918,14 +912,11 @@ class Runner:
         the first seven — that's a correctness baseline for a service-grade agent,
         not an optional feature.
         """
-        database = self.runtime.database
-        if database is None:
-            return
         try:
             # Persisting can be heavy work on an encrypted backend: the framework
             # takes care of offloading it to a thread pool so it doesn't block the
             # event loop.
-            await asyncio.to_thread(sync_session, database, self.session, keys=self.keys)
+            await self.runtime.persist_session_delta(self.session, keys=self.keys)
         except Exception:
             logger.exception("persist failed session=%s", self.session.session_id)
 

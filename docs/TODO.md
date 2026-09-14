@@ -24,6 +24,8 @@ link here rather than duplicating this list.
   recovery evidence on a repeated creation call.
 - Runtime.with_overrides() preserves all constructor and runtime extension
   configuration not explicitly replaced.
+- RunStore and framework Database calls are thread-offloaded on async paths,
+  with ordered per-Run and per-session persistence lanes.
 - Typed lifecycle seams for tool gates, streaming tool results, and runner hooks.
 - A recovery recipe in docs/06-recovery.md.
 - Deployment-specific crypto context, key stash, and SSE crypto removed from the
@@ -36,8 +38,6 @@ link here rather than duplicating this list.
    broad Any usage and extend the AgentEvent union for interaction events.
 2. Split RunStore into required logging and optional stop, recovery, and dispatch
    capabilities.
-3. Make persistence non-blocking by using asynchronous protocols or consistent
-   thread offloading and batching.
 4. Correct shutdown completion behavior.
 5. Close an interrupted LLM stream and prevent replay duplication after retry.
 6. Externalize user- and model-facing copy behind an injectable object with English

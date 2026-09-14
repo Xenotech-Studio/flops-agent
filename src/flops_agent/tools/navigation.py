@@ -26,7 +26,7 @@ async def _open(arguments: Dict[str, Any], ctx: ToolContext) -> Any:
     if err is not None:
         return err
     session, runtime = got
-    return runtime.open_packages(session, arguments.get("package_paths"))
+    return await runtime.open_packages_async(session, arguments.get("package_paths"))
 
 
 async def _close(arguments: Dict[str, Any], ctx: ToolContext) -> Any:
@@ -34,7 +34,7 @@ async def _close(arguments: Dict[str, Any], ctx: ToolContext) -> Any:
     if err is not None:
         return err
     session, runtime = got
-    return runtime.close_packages(session, arguments.get("package_paths"))
+    return await runtime.close_packages_async(session, arguments.get("package_paths"))
 
 
 def _definition_name(definition: Dict[str, Any]) -> str:

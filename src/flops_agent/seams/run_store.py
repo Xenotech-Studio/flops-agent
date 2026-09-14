@@ -3,8 +3,11 @@
 Service-run supervision (background work, graceful shutdown, restart recovery,
 and cross-process streaming) requires event logs and state to survive across
 processes. Products choose the storage backend; the framework owns orchestration.
-All methods are synchronous, and implementations should handle persistence
-failures internally because persistence must not interrupt an active run.
+The protocol methods are synchronous so simple backends remain easy to write;
+Runtime and Run call them through ``asyncio.to_thread`` on service paths.
+Implementations must therefore be safe to call from a worker thread and should
+handle persistence failures internally because persistence must not interrupt an
+active run.
 """
 from __future__ import annotations
 

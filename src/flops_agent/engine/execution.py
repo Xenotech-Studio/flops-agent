@@ -230,22 +230,42 @@ class Run:
         # the run (we catch here too, as a backstop in case an
         # implementation forgets to).
         self._store = store
-        if store is not None:
+        self._store_ready = asyncio.Event()
+        self._store_init_lock = asyncio.Lock()
+        self._store_write_lock = asyncio.Lock()
+        if store is None:
+            self._store_ready.set()
+
+    async def initialize_store(self) -> None:
+        """Create and pre-warm the optional store without blocking the loop.
+
+        ``Runtime.start`` schedules this before invoking the Runner, while
+        direct ``Run`` users are protected by :meth:`emit` and
+        :meth:`subscribe` awaiting it lazily.  The event deliberately yields
+        to the background driver, so an immediate subscriber cannot deadlock
+        waiting for startup to reach this point.
+        """
+        if self._store_ready.is_set():
+            return
+        async with self._store_init_lock:
+            if self._store_ready.is_set():
+                return
+            store = self._store
+            if store is None:
+                self._store_ready.set()
+                return
             try:
-                store.create_run(run_id, owner_id, session_id)
+                await asyncio.to_thread(store.create_run, self.id, self.owner_id, self.session_id)
             except Exception:
-                logger.exception("run store create_run failed run=%s", run_id)
-            # Capability probing happens **before touching the log**: if the
-            # store doesn't support overwrite, disable it once up front so
-            # ``_apply_to_log`` sticks to append-only for the whole run.
-            # Otherwise you'd get a length divergence where "the log was
-            # overwritten but the store could only append" — and length IS
-            # the cursor, so divergence means misalignment.
+                logger.exception("run store create_run failed run=%s", self.id)
+            # Capability probing happens before reading the log, so an
+            # unsupported overwrite never creates a cursor mismatch.
             if getattr(store, "replace_chunk", None) is None:
                 self._inplace_ok = False
-            self._seed_log_from_store()
+            await self._seed_log_from_store()
+            self._store_ready.set()
 
-    def _seed_log_from_store(self) -> None:
+    async def _seed_log_from_store(self) -> None:
         """When resuming a run (reusing an old run_id), pre-warm ``_log`` with
         whatever log segments already exist in the store.
 
@@ -272,10 +292,10 @@ class Run:
         if reader is None or sizer is None:
             return
         try:
-            n = int(sizer(self.id) or 0)
+            n = int(await asyncio.to_thread(sizer, self.id) or 0)
             if n <= 0:
                 return
-            seeded = list(reader(self.id, 0) or [])
+            seeded = list(await asyncio.to_thread(reader, self.id, 0) or [])
         except Exception:
             logger.exception("run store seed log failed run=%s", self.id)
             self._inplace_ok = False
@@ -328,14 +348,15 @@ class Run:
 
     async def emit(self, event: Any) -> None:
         """Emit one event: feed it to the coalescer to accumulate into the
-        log (persisted synchronously if a store is attached), and deliver it
+        log (persisted off-loop if a store is attached), and deliver it
         as-is to currently connected subscribers."""
+        await self.initialize_store()
         parts = self._coalescer.feed(event)
         async with self._lock:
             appended, replaced = self._apply_to_log(parts)
             cursor = self._live_cursor()
             targets = list(self._subscribers)
-        self._persist_parts(appended, replaced)
+        await self._persist_parts(appended, replaced)
         delivery = Delivery(event=event, cursor=cursor, replayed=False)
         for q in targets:
             try:
@@ -391,42 +412,35 @@ class Run:
             return self._open_slot
         return len(self._log)
 
-    def _persist_parts(
+    async def _persist_parts(
         self, appended: List[Any], replaced: Optional[List[Tuple[int, Any]]] = None
     ) -> None:
         if self._store is None:
             return
-        if replaced:
-            replacer = getattr(self._store, "replace_chunk", None)
-            for idx, ev in replaced:
-                try:
-                    if replacer is None:
-                        raise RuntimeError("store has no replace_chunk")
-                    if not replacer(self.id, idx, ev):
-                        raise RuntimeError("replace_chunk rejected")
-                except Exception as exc:
-                    # **Do not fall back to append**: the log has already
-                    # overwritten that position, so appending to the store
-                    # too would make the two diverge in length — and length
-                    # IS the cursor. So we just disable in-place overwrite
-                    # going forward; the store keeps the previous snapshot in
-                    # that slot for now. The final state for this window will
-                    # land as an appended entry right after it, and since
-                    # snapshots use set-the-whole-key overwrite semantics,
-                    # replaying up through that later entry self-heals.
-                    # Better briefly stale than misaligned.
-                    self._inplace_ok = False
-                    logger.warning(
-                        "run store replace_chunk failed run=%s idx=%d (%s); "
-                        "in-place disabled for this run, slot keeps previous snapshot",
-                        self.id, idx, exc,
-                    )
-        if not appended:
-            return
-        try:
-            self._store.append_chunks(self.id, appended)
-        except Exception:
-            logger.exception("run store append_chunks failed run=%s", self.id)
+        async with self._store_write_lock:
+            if replaced:
+                replacer = getattr(self._store, "replace_chunk", None)
+                for idx, ev in replaced:
+                    try:
+                        if replacer is None:
+                            raise RuntimeError("store has no replace_chunk")
+                        if not await asyncio.to_thread(replacer, self.id, idx, ev):
+                            raise RuntimeError("replace_chunk rejected")
+                    except Exception as exc:
+                        # Do not fall back to append: indices are cursors, so
+                        # appending after an in-place local overwrite diverges.
+                        self._inplace_ok = False
+                        logger.warning(
+                            "run store replace_chunk failed run=%s idx=%d (%s); "
+                            "in-place disabled for this run, slot keeps previous snapshot",
+                            self.id, idx, exc,
+                        )
+            if not appended:
+                return
+            try:
+                await asyncio.to_thread(self._store.append_chunks, self.id, appended)
+            except Exception:
+                logger.exception("run store append_chunks failed run=%s", self.id)
 
     async def finish(
         self,
@@ -455,6 +469,7 @@ class Run:
         a disconnect only gets the log, and if this event isn't in the log
         they'll never see it.
         """
+        await self.initialize_store()
         if emit_error and status is RunStatus.FAILED and error is not None and not self.done:
             from flops_agent.entities.events import Error as _ErrorEvent
 
@@ -470,21 +485,24 @@ class Run:
             targets = list(self._subscribers)
             self._subscribers.clear()
         self.finished_at = time.time()
-        self._persist_parts(appended, replaced)
+        await self._persist_parts(appended, replaced)
         if self._store is not None:
-            try:
-                if self.interrupted:
-                    self._store.mark_interrupted(self.id)
-                else:
-                    # Record the final status in the store as-is
-                    # (done/stopped/failed/suspended); a suspended run has
-                    # not "finished" in the `done` sense — if a suspended run
-                    # were recorded in the store as a normal completion,
-                    # anything checking session liveness or querying status
-                    # would be misled.
-                    self._store.mark_finished(self.id, status=str(status.value))
-            except Exception:
-                logger.exception("run store mark_finished/interrupted failed run=%s", self.id)
+            async with self._store_write_lock:
+                try:
+                    if self.interrupted:
+                        await asyncio.to_thread(self._store.mark_interrupted, self.id)
+                    else:
+                        # Record the final status in the store as-is
+                        # (done/stopped/failed/suspended); a suspended run has
+                        # not "finished" in the `done` sense — if a suspended run
+                        # were recorded in the store as a normal completion,
+                        # anything checking session liveness or querying status
+                        # would be misled.
+                        await asyncio.to_thread(
+                            self._store.mark_finished, self.id, status=str(status.value)
+                        )
+                except Exception:
+                    logger.exception("run store mark_finished/interrupted failed run=%s", self.id)
         # Pre-sentinel delivery seam: lets the product layer hand connected
         # subscribers one last frame before the sentinel (e.g. a "final
         # reconnect cursor" — subscribers already saw the flushed segment
@@ -522,16 +540,18 @@ class Run:
         (which is what triggers the frontend to reconnect), matching the
         semantics of the legacy product's cleanup hook.
         """
+        await self.initialize_store()
         async with self._lock:
             if self.done:
                 return
             self.interrupted = True
             targets = list(self._subscribers)
         if self._store is not None:
-            try:
-                self._store.mark_interrupted(self.id)
-            except Exception:
-                logger.exception("run store mark_interrupted failed run=%s", self.id)
+            async with self._store_write_lock:
+                try:
+                    await asyncio.to_thread(self._store.mark_interrupted, self.id)
+                except Exception:
+                    logger.exception("run store mark_interrupted failed run=%s", self.id)
         for q in targets:
             try:
                 q.put_nowait(None)
@@ -556,6 +576,7 @@ class Run:
         Callers shouldn't assume the two line up 1:1 or try to dedupe across
         them.
         """
+        await self.initialize_store()
         idx = max(0, int(from_cursor or 0))
         async with self._lock:
             backlog = list(self._log[idx:])
@@ -568,11 +589,17 @@ class Run:
         for i, part in enumerate(backlog, start=idx + 1):
             yield Delivery(event=part, cursor=i, replayed=True)
         if q is None:
+            await self.wait()
             return
         try:
             while True:
                 item = await q.get()
                 if item is None:
+                    # ``finish`` wakes subscribers before Runner performs its
+                    # async marker cleanup. Keep the public stream lifecycle
+                    # aligned with ``wait()`` so callers do not tear down the
+                    # event loop while that ordered cleanup is still pending.
+                    await self.wait()
                     return
                 yield item
         finally:
@@ -589,8 +616,11 @@ class Run:
         return self.subscribe(0)
 
     async def wait(self) -> RunStatus:
-        """Wait for this round to finish, and return its final status."""
+        """Wait for terminal state and Runtime's post-finish lifecycle work."""
         await self._finished.wait()
+        task = self.task
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            await asyncio.shield(task)
         return self._status
 
     # ── interrupt ────────────────────────────────────────────────────────────

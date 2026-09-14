@@ -57,10 +57,8 @@ def test_start_marks_and_terminal_clears():
 
     async def _go():
         run = runtime.start(session)
-        # the synchronous part of start() already wrote the marker: in-memory meta + surgical database persist
-        meta = db.load_meta("s1") or {}
-        assert meta.get("active_run_id") == run.id, meta
-        assert meta.get("active_run_started_at")
+        # start() updates local state immediately; durable marker I/O happens
+        # asynchronously before the Runner begins so it never stalls the loop.
         assert session.meta.get("active_run_id") == run.id
         async for _ in run:
             pass

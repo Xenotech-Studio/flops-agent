@@ -21,7 +21,7 @@ keys is a pass-through slot. A zero-knowledge product can provide its own key sh
 
 InMemoryDatabase is a semantically complete reference implementation for examples and tests. It disappears with the process and is not production storage.
 
-To implement Database, provide synchronous versions of load_meta, load_messages, count_messages, append_messages, truncate_messages, replace_message, patch_meta, and create_session. They address a session by session_id and optional owner_id; encrypted reads and writes also receive untouched keys. load_session(), save_session(), and normal runner persistence move synchronous work off the event loop. A low-level runtime-state patch_meta() may still run in the current thread, so a network-backed implementation must supply a fast non-blocking adapter rather than doing slow RPC inside these synchronous methods.
+To implement Database, provide synchronous versions of load_meta, load_messages, count_messages, append_messages, truncate_messages, replace_message, patch_meta, and create_session. They address a session by session_id and optional owner_id; encrypted reads and writes also receive untouched keys. Runtime moves every framework async-path database operation — including lifecycle marker patches — off the event loop and serializes work for one session. Implementations must be safe to call from worker threads. Use load_session_sync() and save_session_sync() only in synchronous scripts.
 
 ## RunStore stores a Run
 
@@ -30,6 +30,11 @@ Database answers “what did this conversation say?” RunStore answers “where
     runtime = Runtime(llm=my_llm, database=my_database, run_store=my_run_store)
 
 Cross-process reconnection, stop intent, and restart recovery rely on optional RunStore capabilities. InMemoryRunStore is suitable for single-process demos and protocol tests. A production store is normally shared and keeps append_chunks(), buffer_range(), and status updates consistent for the same run id.
+
+RunStore remains a synchronous protocol, but Runtime and Run offload service-path
+calls to worker threads. A Run initializes its store before Runner work begins;
+subscribers wait for that preloading step, so recovery replay is complete and
+the event loop is never blocked by storage I/O.
 
 `create_run(run_id, ...)` is create-if-absent. Repeating it for an existing id
 must succeed without changing its metadata, buffered output, stop intent, or

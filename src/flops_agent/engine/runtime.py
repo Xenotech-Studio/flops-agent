@@ -232,6 +232,26 @@ class Runtime:
         #: synchronously — schedule your own create_task for async work.
         self.on_session_run_marked: Any = None
         self.on_session_run_cleared: Any = None
+        # Database methods are synchronous protocol calls. Async framework
+        # paths route them through this per-session lane so a marker patch
+        # cannot overtake a history write for the same session.
+        self._database_locks: Dict[Tuple[str, str], "asyncio.Lock"] = {}
+
+    def _database_lock_for(self, session_id: str, owner_id: str) -> "asyncio.Lock":
+        key = (owner_id, session_id)
+        lock = self._database_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._database_locks[key] = lock
+        return lock
+
+    def _database_lock(self, session: Session) -> "asyncio.Lock":
+        return self._database_lock_for(session.session_id, session.owner_id)
+
+    async def _database_call(self, session: Session, fn: Any, *args: Any, **kwargs: Any) -> Any:
+        """Run one session-scoped database operation off-loop, in order."""
+        async with self._database_lock(session):
+            return await asyncio.to_thread(fn, *args, **kwargs)
 
     # ── Per-session run-state convenience surface ───────────────────────────
 
@@ -271,6 +291,29 @@ class Runtime:
         )
         return rid if alive else None
 
+    async def active_run_async(self, session_id: str, *, owner_id: str = "") -> Optional[str]:
+        """Async cross-process active-run lookup for service request paths."""
+        run = self.runs.find(session_id)
+        if run is not None and not getattr(run, "done", False):
+            return run.id
+        store = self.run_store
+        getter = getattr(store, "get_latest_run_id", None)
+        if store is None or getter is None:
+            return None
+        try:
+            rid = str(await asyncio.to_thread(getter, owner_id, session_id) or "").strip()
+            if not rid:
+                return None
+            meta = await asyncio.to_thread(store.get_meta, rid)
+        except Exception:
+            return None
+        if meta is None:
+            return None
+        alive = str(getattr(meta, "status", "") or "") not in (
+            "done", "stopped", "failed", "suspended"
+        )
+        return rid if alive else None
+
     async def stop_session(self, session_id: str, *, owner_id: str = "") -> Optional[str]:
         """Interrupt by session: in-process, find → ``run.stop()``; cross-process,
         write the stop intent to the store via the latest-run index (the other
@@ -280,11 +323,11 @@ class Runtime:
         if run is not None and not getattr(run, "done", False):
             await run.stop()
             return run.id
-        rid = self.active_run(session_id, owner_id=owner_id)
+        rid = await self.active_run_async(session_id, owner_id=owner_id)
         if not rid or self.run_store is None:
             return None
         try:
-            self.run_store.request_stop(rid)
+            await asyncio.to_thread(self.run_store.request_stop, rid)
         except Exception:
             logger.exception("stop_session request_stop failed run=%s", rid)
             return None
@@ -324,6 +367,34 @@ class Runtime:
                 session.session_id, list(fields),
             )
 
+    async def _patch_session_meta_async(self, session: Session, fields: Dict[str, Any]) -> None:
+        """Async counterpart for framework lifecycle paths."""
+        database = self.database
+        patch = getattr(database, "patch_meta", None)
+        if database is None or patch is None:
+            return
+        try:
+            await self._database_call(
+                session, patch, session.session_id, dict(fields), owner_id=session.owner_id
+            )
+        except Exception:
+            logger.exception(
+                "patch session meta failed session=%s fields=%s",
+                session.session_id, list(fields),
+            )
+
+    def _mark_session_active_run_local(self, session: Session, run_id: str) -> Optional[Dict[str, Any]]:
+        """Update local marker state and return the precise durable patch, if any."""
+        f, sf = session.active_run_field, session.active_run_started_field
+        if session.meta is None:  # pyright: ignore[reportUnnecessaryComparison]
+            session.meta = {}
+        if str(session.meta.get(f) or "").strip() == str(run_id):
+            return None
+        now_iso = datetime.now().isoformat()
+        session.meta[f] = run_id
+        session.meta[sf] = now_iso
+        return {f: run_id, sf: now_iso}
+
     def _mark_session_active_run(self, session: Session, run_id: str) -> None:
         """A run starts: write the marker onto session meta and persist it.
 
@@ -332,15 +403,10 @@ class Runtime:
         the original started_at, so the recovery action doesn't reset the
         frontend's elapsed-time display."""
         try:
-            f, sf = session.active_run_field, session.active_run_started_field
-            if session.meta is None:  # pyright: ignore[reportUnnecessaryComparison] -- guards against a subclass that skipped __init__ assignment
-                session.meta = {}
-            if str(session.meta.get(f) or "").strip() == str(run_id):
+            fields = self._mark_session_active_run_local(session, run_id)
+            if fields is None:
                 return
-            now_iso = datetime.now().isoformat()
-            session.meta[f] = run_id
-            session.meta[sf] = now_iso
-            self._patch_session_meta(session, {f: run_id, sf: now_iso})
+            self._patch_session_meta(session, fields)
             if self.on_session_run_marked is not None:
                 try:
                     self.on_session_run_marked(session, run_id)
@@ -348,6 +414,19 @@ class Runtime:
                     logger.exception("on_session_run_marked failed session=%s", session.session_id)
         except Exception:
             logger.exception("mark active run failed session=%s", session.session_id)
+
+    async def _persist_marked_session_run(
+        self, session: Session, run_id: str, fields: Optional[Dict[str, Any]]
+    ) -> None:
+        """Durably write a marker prepared by ``start`` without blocking it."""
+        if fields is None:
+            return
+        await self._patch_session_meta_async(session, fields)
+        if self.on_session_run_marked is not None:
+            try:
+                self.on_session_run_marked(session, run_id)
+            except Exception:
+                logger.exception("on_session_run_marked failed session=%s", session.session_id)
 
     def _run_seems_live(self, run_id: str) -> bool:
         """Conservative liveness check used by guard-clearing: if we can't
@@ -370,6 +449,24 @@ class Runtime:
             return True
         try:
             meta = store.get_meta(rid)
+        except Exception:
+            return True
+        if meta is None:
+            return True
+        return str(getattr(meta, "status", "") or "") not in ("done", "stopped", "failed")
+
+    async def _run_seems_live_async(self, run_id: str) -> bool:
+        rid = str(run_id or "").strip()
+        if not rid:
+            return False
+        pooled = self.runs.get(rid)
+        if pooled is not None:
+            return not getattr(pooled, "done", False)
+        store = self.run_store
+        if store is None:
+            return True
+        try:
+            meta = await asyncio.to_thread(store.get_meta, rid)
         except Exception:
             return True
         if meta is None:
@@ -434,6 +531,55 @@ class Runtime:
         session = self.session_class(session_id, owner_id=owner_id)
         self._clear_session_active_run(session, run_id, reason=reason)
 
+    async def clear_session_active_run_async(
+        self,
+        session_id: str,
+        *,
+        owner_id: str = "",
+        run_id: str = "",
+        reason: str = "cleared",
+    ) -> None:
+        """Async service-path variant of :meth:`clear_session_active_run`."""
+        session = self.session_class(session_id, owner_id=owner_id)
+        await self._clear_session_active_run_async(session, run_id, reason=reason)
+
+    async def _clear_session_active_run_async(
+        self, session: Session, run_id: str, *, reason: str = "finished"
+    ) -> None:
+        database = self.database
+        try:
+            async with self._database_lock(session):
+                stored = ""
+                if database is not None:
+                    try:
+                        meta_now = await asyncio.to_thread(
+                            database.load_meta, session.session_id, owner_id=session.owner_id
+                        ) or {}
+                        stored = str(meta_now.get(session.active_run_field) or "").strip()
+                    except Exception:
+                        stored = str(session.meta.get(session.active_run_field) or "").strip()
+                else:
+                    stored = str(session.meta.get(session.active_run_field) or "").strip()
+                if not stored:
+                    return
+                if stored != str(run_id) and await self._run_seems_live_async(stored):
+                    return
+                if session.meta is not None:  # pyright: ignore[reportUnnecessaryComparison]
+                    session.meta.pop(session.active_run_field, None)
+                    session.meta.pop(session.active_run_started_field, None)
+                if database is not None:
+                    patch = getattr(database, "patch_meta", None)
+                    if patch is not None:
+                        await asyncio.to_thread(
+                            patch, session.session_id,
+                            {session.active_run_field: None, session.active_run_started_field: None},
+                            owner_id=session.owner_id,
+                        )
+            if self.on_session_run_cleared is not None:
+                self.on_session_run_cleared(session, stored, reason)
+        except Exception:
+            logger.exception("clear active run failed session=%s", session.session_id)
+
     # ── Session suspended marker (same family as the active marker; see Session.suspended_field comments) ──
 
     # ── Tool packages: session-level toggle (framework owns the write, persisted via patch_meta) ──
@@ -471,6 +617,45 @@ class Runtime:
             opened.discard(p)
         result = sorted(opened)
         self._set_opened_packages(session, result)
+        return {
+            "success": True,
+            session.opened_packages_field: result,
+            "message": f"Closed {len(paths)} tool package(s) ({len(result)} currently open)",
+        }
+
+    async def open_packages_async(self, session: Session, package_paths: Any) -> Dict[str, Any]:
+        """Async service-path variant of :meth:`open_packages`."""
+        paths, err = self._normalize_package_paths(package_paths, must_exist=True)
+        if err is not None:
+            return err
+        if not paths:
+            return {"success": False, "error": "No valid tool package paths to open were provided"}
+        opened = set(session.opened_packages)
+        opened.update(paths)
+        result = sorted(opened)
+        session.set_opened_packages(result)
+        await self._patch_session_meta_async(
+            session, {session.opened_packages_field: list(result)}
+        )
+        return {
+            "success": True,
+            session.opened_packages_field: result,
+            "message": f"Opened {len(paths)} tool package(s) ({len(result)} currently open)",
+        }
+
+    async def close_packages_async(self, session: Session, package_paths: Any) -> Dict[str, Any]:
+        """Async service-path variant of :meth:`close_packages`."""
+        paths, err = self._normalize_package_paths(package_paths, must_exist=False)
+        if err is not None:
+            return err
+        opened = set(session.opened_packages)
+        for path in paths:
+            opened.discard(path)
+        result = sorted(opened)
+        session.set_opened_packages(result)
+        await self._patch_session_meta_async(
+            session, {session.opened_packages_field: list(result)}
+        )
         return {
             "success": True,
             session.opened_packages_field: result,
@@ -516,6 +701,18 @@ class Runtime:
             payload = dict(marker or {})
             session.meta[f] = payload
             self._patch_session_meta(session, {f: payload})
+        except Exception:
+            logger.exception("mark session suspended failed session=%s", session.session_id)
+
+    async def mark_session_suspended_async(self, session: Session, marker: Dict[str, Any]) -> None:
+        """Persist a suspension marker without running database I/O on-loop."""
+        try:
+            f = session.suspended_field
+            if session.meta is None:  # pyright: ignore[reportUnnecessaryComparison]
+                session.meta = {}
+            payload = dict(marker or {})
+            session.meta[f] = payload
+            await self._patch_session_meta_async(session, {f: payload})
         except Exception:
             logger.exception("mark session suspended failed session=%s", session.session_id)
 
@@ -588,6 +785,62 @@ class Runtime:
         except Exception:
             logger.exception("suspend marker lifecycle failed run=%s", run_id)
 
+    async def _clear_session_suspended_async(
+        self, session: Session, run_id: str = ""
+    ) -> None:
+        database = self.database
+        try:
+            async with self._database_lock(session):
+                stored: Any = None
+                if database is not None:
+                    try:
+                        meta_now = await asyncio.to_thread(
+                            database.load_meta, session.session_id, owner_id=session.owner_id
+                        ) or {}
+                        stored = meta_now.get(session.suspended_field)
+                    except Exception:
+                        stored = session.meta.get(session.suspended_field)
+                else:
+                    stored = session.meta.get(session.suspended_field)
+                if not stored:
+                    return
+                marker_rid = (
+                    str(cast(Dict[str, Any], stored).get("run_id") or "").strip()
+                    if isinstance(stored, dict) else ""
+                )
+                if (
+                    run_id and marker_rid and marker_rid != str(run_id)
+                    and await self._run_seems_live_async(marker_rid)
+                ):
+                    return
+                if session.meta is not None:  # pyright: ignore[reportUnnecessaryComparison]
+                    session.meta.pop(session.suspended_field, None)
+                if database is not None:
+                    patch = getattr(database, "patch_meta", None)
+                    if patch is not None:
+                        await asyncio.to_thread(
+                            patch, session.session_id, {session.suspended_field: None},
+                            owner_id=session.owner_id,
+                        )
+        except Exception:
+            logger.exception("clear session suspended failed session=%s", session.session_id)
+
+    async def settle_session_markers_async(
+        self, session: Session, run_id: str, suspend_marker: Optional[Dict[str, Any]],
+    ) -> None:
+        """Async lifecycle variant used by Runner after it has finished a Run."""
+        await self._clear_session_active_run_async(session, run_id)
+        try:
+            if suspend_marker is not None:
+                if suspend_marker and not (session.meta or {}).get(session.suspended_field):
+                    payload = dict(suspend_marker)
+                    payload.setdefault("run_id", run_id)
+                    await self.mark_session_suspended_async(session, payload)
+            else:
+                await self._clear_session_suspended_async(session, run_id)
+        except Exception:
+            logger.exception("suspend marker lifecycle failed run=%s", run_id)
+
     def clear_session_suspended(
         self,
         session_id: str,
@@ -604,6 +857,19 @@ class Runtime:
         exactly how you override that)."""
         session = self.session_class(session_id, owner_id=owner_id)
         self._clear_session_suspended(session, run_id, reason=reason)
+
+    async def clear_session_suspended_async(
+        self,
+        session_id: str,
+        *,
+        owner_id: str = "",
+        run_id: str = "",
+        reason: str = "resolved",
+    ) -> None:
+        """Async service-path variant of :meth:`clear_session_suspended`."""
+        del reason  # The async guard has no product hook reason to publish.
+        session = self.session_class(session_id, owner_id=owner_id)
+        await self._clear_session_suspended_async(session, run_id)
 
     # ── Out-of-turn input delivery ───────────────────────────────────────────
 
@@ -709,13 +975,14 @@ class Runtime:
         environment for zero-knowledge decryption) are carried across
         automatically by to_thread.
         """
-        return await asyncio.to_thread(
-            self.load_session_sync,
-            session_id,
-            owner_id=owner_id,
-            keys=keys,
-            create_if_missing=create_if_missing,
-        )
+        async with self._database_lock_for(session_id, owner_id):
+            return await asyncio.to_thread(
+                self.load_session_sync,
+                session_id,
+                owner_id=owner_id,
+                keys=keys,
+                create_if_missing=create_if_missing,
+            )
 
     def save_session_sync(self, session: Session, *, keys: Optional[Mapping[str, Any]] = None) -> None:
         """Write conversation state back to ``database`` (``keys`` same as
@@ -742,7 +1009,32 @@ class Runtime:
     async def save_session(self, session: Session, *, keys: Optional[Mapping[str, Any]] = None) -> None:
         """Async write-back (a thread-pool wrapper around
         :meth:`save_session_sync`, for the same reasons as load)."""
-        await asyncio.to_thread(self.save_session_sync, session, keys=keys)
+        async with self._database_lock(session):
+            await asyncio.to_thread(self.save_session_sync, session, keys=keys)
+
+    async def persist_session_delta(
+        self, session: Session, *, keys: Optional[Mapping[str, Any]] = None
+    ) -> int:
+        """Persist only history changes, serialized with marker mutations."""
+        database = self.database
+        if database is None:
+            return 0
+        async with self._database_lock(session):
+            return await asyncio.to_thread(sync_session, database, session, keys=keys)
+
+    async def replace_session_message(
+        self, session: Session, index: int, *, keys: Optional[Mapping[str, Any]] = None
+    ) -> None:
+        """Offload one indexed history rewrite in the session's I/O lane."""
+        database = self.database
+        replace = getattr(database, "replace_message", None)
+        if database is None or replace is None or not (0 <= index < len(session.messages)):
+            return
+        async with self._database_lock(session):
+            await asyncio.to_thread(
+                replace, session.session_id, index, session.messages[index],
+                owner_id=session.owner_id, keys=keys,
+            )
 
     # ── Running a turn ─────────────────────────────────────────────────────────
 
@@ -799,10 +1091,15 @@ class Runtime:
         # by reading it. Cleared on terminal state by Runner.drive's guard-clearing.
         # Products should not write these two fields themselves — multiple writers
         # would inevitably clobber each other.
-        self._mark_session_active_run(session, run.id)
+        marker_fields = self._mark_session_active_run_local(session, run.id)
 
         async def _drive() -> None:
             try:
+                # Both persistence preparations yield to the loop. subscribe()
+                # waits on Run.initialize_store(), so an immediate subscriber
+                # cannot race the recovery-log preload or deadlock startup.
+                await self._persist_marked_session_run(session, run.id, marker_fields)
+                await run.initialize_store()
                 await runner.drive()
             finally:
                 self.runs.discard(run)
@@ -833,7 +1130,7 @@ class Runtime:
         async def _watch() -> None:
             while not run.done:
                 try:
-                    if probe(run.id):
+                    if await asyncio.to_thread(probe, run.id):
                         await run.stop()
                         return
                 except Exception as e:
@@ -873,7 +1170,7 @@ class Runtime:
         if lister is None or resumer is None:
             return 0
         try:
-            run_ids = lister()
+            run_ids = await asyncio.to_thread(lister)
         except Exception:
             logger.warning("recover: list_active_run_ids failed", exc_info=True)
             return 0
@@ -883,13 +1180,13 @@ class Runtime:
         scheduled = 0
         for rid in run_ids:
             try:
-                meta = store.get_meta(rid)
+                meta = await asyncio.to_thread(store.get_meta, rid)
                 if not meta:
                     deleter = getattr(store, "delete_run", None)
                     if deleter is not None:
-                        deleter(rid)
+                        await asyncio.to_thread(deleter, rid)
                     continue
-                if resumer(rid) == 0:
+                if await asyncio.to_thread(resumer, rid) == 0:
                     logger.warning("recover: gave up run=%s (resume budget exceeded)", rid)
                     if on_gave_up is not None:
                         try:

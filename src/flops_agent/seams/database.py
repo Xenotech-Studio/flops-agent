@@ -8,8 +8,9 @@ into the framework protocol.
 
 Every method accepts ``keys`` for zero-knowledge deployments. They are passed
 through without interpretation, caching, or persistence. Methods are
-synchronous; a blocking implementation must use its own thread pool or async
-adapter and must not perform network I/O on the event loop.
+synchronous; Runtime offloads them on asynchronous framework paths and
+serializes operations for one session. Implementations must be safe to call
+from a worker thread; direct ``*_sync`` helpers remain for scripts.
 """
 from __future__ import annotations
 
