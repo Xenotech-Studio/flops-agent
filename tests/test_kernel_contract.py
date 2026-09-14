@@ -17,6 +17,7 @@ import importlib
 import inspect
 import os
 import sys
+from typing import get_args, get_type_hints
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -36,6 +37,43 @@ def test_every_exported_name_exists():
     missing = [n for n in fa.__all__ if not hasattr(fa, n)]
     assert not missing, f"names in __all__ that cannot be resolved: {missing}"
     print("test_every_exported_name_exists OK")
+
+
+def test_public_typed_contracts_are_importable_and_complete():
+    """A third-party integration can import and use every typed boundary."""
+    from flops_agent import (  # noqa: PLC0415
+        FinishStreamChunk,
+        InMemoryRunStore,
+        LLMStreamClient,
+        RunMeta,
+        StreamChunk,
+        TextStreamChunk,
+        ToolCall,
+        ToolCallStreamChunk,
+        ToolExecutor,
+        ToolFunction,
+        ToolOutcome,
+    )
+    from flops_agent.engine.stream import StreamAccumulator  # noqa: PLC0415
+    from flops_agent.seams.run_store import RunStore  # noqa: PLC0415
+    from flops_agent.tools.schema import tool_call_from_dict, tool_call_to_openai  # noqa: PLC0415
+
+    call = ToolCall(id="call-1", function=ToolFunction("weather", '{"city":"Paris"}'))
+    assert tool_call_from_dict(tool_call_to_openai(call)) == call
+    assert get_type_hints(tool_call_from_dict)["return"] is ToolCall
+    assert get_type_hints(ToolExecutor.execute)["return"] is ToolOutcome
+    assert StreamChunk in get_args(get_type_hints(LLMStreamClient.acompletion)["return"])
+    assert RunMeta in get_args(get_type_hints(RunStore.get_meta)["return"])
+    assert InMemoryRunStore().get_meta("missing") is None
+
+    acc = StreamAccumulator()
+    assert [type(event).__name__ for event in acc.feed(TextStreamChunk("hi"))] == ["TextDelta"]
+    assert [type(event).__name__ for event in acc.feed(
+        ToolCallStreamChunk(0, id="call-1", name="weather", arguments_delta="{}")
+    )] == ["ToolCallStarted", "ToolCallArgsDelta"]
+    finish = FinishStreamChunk(reason="stop", usage={"total_tokens": 9})
+    assert finish.kind == "finish" and finish.usage == {"total_tokens": 9}
+    print("test_public_typed_contracts_are_importable_and_complete OK")
 
 
 KNOWN_COLLISIONS = {
