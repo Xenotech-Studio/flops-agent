@@ -978,14 +978,24 @@ class Runtime:
         is left unchanged."""
         base: Dict[str, Any] = {
             "llm": self.llm, "tools": self.tools, "database": self.database,
-            "executor": self.executor, "runner": self.runner,
+            "executor": self.executor, "agent": self.agent, "runner": self.runner,
             "coalescer": self.coalescer, "session_class": self.session_class,
             "run_class": self.run_class, "run_store": self.run_store,
-            "model": self.model, "registry": self.registry,
+            "inbox": self.inbox, "wire": self.wire, "model": self.model,
+            "rescue_silent_reply": self.rescue_silent_reply,
+            "reply_rescue_plan": self.reply_rescue_plan,
+            "silent_reply_max_rescues": self.silent_reply_max_rescues,
+            "llm_stream_retry": self.llm_stream_retry, "registry": self.registry,
             **self.completion_kwargs,
         }
         base.update(kwargs)
         derived = Runtime(**base)
+        # These are intentionally post-construction extension slots, so they
+        # need explicit copying too. A derivation must not silently detach
+        # product lifecycle notifications or change stop-watch timing.
+        derived.on_session_run_marked = self.on_session_run_marked
+        derived.on_session_run_cleared = self.on_session_run_cleared
+        derived.stop_poll_interval = self.stop_poll_interval
         # A derived runtime **shares the parent's RunPool**: the semantics of deriving
         # are "same runtime, a few config values changed", and run supervision
         # (shutdown sweeping, runs.find for stream reattachment) must see every

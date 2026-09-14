@@ -38,7 +38,7 @@ Their distinct lifetimes are the reason they are separate objects:
 | \`Query\` | One entry call | Existing history or a reconnection cursor |
 | \`Run\` / \`Runner\` | One execution | Long-term truth for the next turn |
 
-A \`Runtime\` accepts one \`agent\` at construction. If a product selects a persona per request, it must choose the agent first and explicitly derive a runtime with \`runtime.with_overrides(agent=chosen_agent)\`, or assemble a runtime for that persona. Do not put the current agent in a global variable or a temporary session field.
+A \`Runtime\` accepts one \`agent\` at construction. If a product selects a persona per request, it must choose the agent first and explicitly derive a runtime with \`runtime.with_overrides(agent=chosen_agent)\`, or assemble a runtime for that persona. \`with_overrides()\` preserves every other Runtime configuration slot, including persistence, inbox, wire, retry, and lifecycle-hook settings. Do not put the current agent in a global variable or a temporary session field.
 
 ## The smallest service lifecycle
 

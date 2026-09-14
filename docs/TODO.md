@@ -22,6 +22,8 @@ link here rather than duplicating this list.
   with `SessionRunActiveError`, while independent sessions remain isolated.
 - RunStore creation is idempotent by run id and preserves all replay and
   recovery evidence on a repeated creation call.
+- Runtime.with_overrides() preserves all constructor and runtime extension
+  configuration not explicitly replaced.
 - Typed lifecycle seams for tool gates, streaming tool results, and runner hooks.
 - A recovery recipe in docs/06-recovery.md.
 - Deployment-specific crypto context, key stash, and SSE crypto removed from the
@@ -36,8 +38,7 @@ link here rather than duplicating this list.
    capabilities.
 3. Make persistence non-blocking by using asynchronous protocols or consistent
    thread offloading and batching.
-4. Correct shutdown completion behavior and make with_overrides preserve all
-   relevant configuration.
+4. Correct shutdown completion behavior.
 5. Close an interrupted LLM stream and prevent replay duplication after retry.
 6. Externalize user- and model-facing copy behind an injectable object with English
    defaults.
