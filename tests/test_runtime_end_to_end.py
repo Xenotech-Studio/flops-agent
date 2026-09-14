@@ -24,6 +24,7 @@ from flops_agent import (  # noqa: E402
     Runner,
     Runtime,
     Session,
+    SessionRunActiveError,
 )
 from flops_agent.entities import events as ev  # noqa: E402
 
@@ -108,6 +109,24 @@ def test_multi_turn_accumulates_history():
         assert len(runtime.llm.last_request["messages"]) == 4
     _run(go())
     print("test_multi_turn_accumulates_history OK")
+
+
+def test_start_rejects_an_active_session_run_before_creating_another():
+    """start() promises an already-started Run, so it never silently queues one."""
+    async def go():
+        runtime = Runtime(llm=FakeLLM([chunk(content="first")]))
+        session = Session("s1")
+        first = runtime.start(session, Query.text("one"))
+        try:
+            runtime.start(session, Query.text("two"))
+        except SessionRunActiveError as exc:
+            assert exc.session_id == "s1" and exc.run_id == first.id
+        else:
+            raise AssertionError("active session must reject another start")
+        await first.wait()
+
+    _run(go())
+    print("test_start_rejects_an_active_session_run_before_creating_another OK")
 
 
 def test_empty_query_continues_from_state():

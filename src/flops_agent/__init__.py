@@ -79,6 +79,7 @@ from .engine.execution import (
     Run,
     RunPool,
     RunStatus,
+    SessionRunActiveError,
 )
 from .entities.query import Contributor, Query
 from .engine.runtime import Runtime, LLMStreamRetryPolicy
@@ -109,6 +110,7 @@ __all__ = [
     "Run",
     "RunPool",
     "RunStatus",
+    "SessionRunActiveError",
     "Delivery",
     "Coalescer",
     "PassthroughCoalescer",

@@ -641,6 +641,20 @@ class Run:
                 f"log={len(self._log)} subs={len(self._subscribers)}>")
 
 
+class SessionRunActiveError(RuntimeError):
+    """Raised when a session already has an in-flight local :class:`Run`.
+
+    ``Runtime.start`` never queues work: its return value is an already-started
+    run. Products that want queuing can catch this error and apply their own
+    scheduling policy using :attr:`run_id`.
+    """
+
+    def __init__(self, session_id: str, run_id: str) -> None:
+        self.session_id = session_id
+        self.run_id = run_id
+        super().__init__(f"session {session_id!r} already has active run {run_id!r}")
+
+
 class RunPool:
     """Registry of in-flight runs.
 
@@ -659,6 +673,9 @@ class RunPool:
 
     def add(self, run: Run) -> None:
         if run.session_id:
+            existing = self._by_session.get(run.session_id)
+            if existing is not None and existing is not run and not existing.done:
+                raise SessionRunActiveError(run.session_id, existing.id)
             self._by_session[run.session_id] = run
         self._by_id[run.id] = run
 
@@ -691,6 +708,7 @@ class RunPool:
 __all__ = [
     "Run",
     "RunPool",
+    "SessionRunActiveError",
     "RunStatus",
     "Delivery",
     "Coalescer",

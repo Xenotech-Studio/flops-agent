@@ -23,6 +23,7 @@ from flops_agent.engine.execution import (  # noqa: E402
     Run,
     RunPool,
     RunStatus,
+    SessionRunActiveError,
 )
 
 
@@ -262,25 +263,47 @@ def test_pool_finds_by_session_and_id():
     print("test_pool_finds_by_session_and_id OK")
 
 
-def test_pool_one_run_per_session():
-    """Only one run is allowed at a time for a given conversation -- the newer one displaces the previous index."""
+def test_pool_rejects_second_active_run_for_session():
+    """A second run cannot overwrite the active-session index."""
     pool = RunPool()
     old, new = Run("r1", session_id="s1"), Run("r2", session_id="s1")
     pool.add(old)
-    pool.add(new)
-    assert pool.find("s1") is new
-    assert pool.get("r1") is old              # the old one can still be fetched by id (used for reconnecting)
-    print("test_pool_one_run_per_session OK")
+    try:
+        pool.add(new)
+    except SessionRunActiveError as exc:
+        assert exc.session_id == "s1" and exc.run_id == "r1"
+    else:
+        raise AssertionError("second active run must be rejected")
+    assert pool.find("s1") is old and pool.get("r2") is None
+    print("test_pool_rejects_second_active_run_for_session OK")
 
 
-def test_pool_discard_does_not_evict_newer_run():
-    pool = RunPool()
-    old, new = Run("r1", session_id="s1"), Run("r2", session_id="s1")
-    pool.add(old)
-    pool.add(new)
-    pool.discard(old)                          # tearing down the old one shouldn't take the new index with it
-    assert pool.find("s1") is new
-    print("test_pool_discard_does_not_evict_newer_run OK")
+def test_pool_isolates_sessions_and_subscriptions():
+    """Concurrent sessions remain separately addressable and never cross-deliver."""
+    async def go():
+        pool = RunPool()
+        one, two = Run("r1", session_id="s1"), Run("r2", session_id="s2")
+        pool.add(one)
+        pool.add(two)
+        assert pool.find("s1") is one and pool.find("s2") is two
+        got_one, got_two = [], []
+
+        async def collect(run, target):
+            async for delivery in run:
+                target.append(delivery.event)
+
+        left = asyncio.create_task(collect(one, got_one))
+        right = asyncio.create_task(collect(two, got_two))
+        await asyncio.sleep(0)
+        await one.emit("only-one")
+        await two.emit("only-two")
+        await one.finish()
+        await two.finish()
+        await asyncio.gather(left, right)
+        assert got_one == ["only-one"] and got_two == ["only-two"]
+
+    _run(go())
+    print("test_pool_isolates_sessions_and_subscriptions OK")
 
 
 _TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

@@ -18,6 +18,8 @@ link here rather than duplicating this list.
 - InteractionRequest and ANSWER-based suspension and continuation.
 - Persistent session suspension state.
 - Fine-grained Database persistence and HistoryChanged notification.
+- One local Run per session: concurrent `Runtime.start()` calls are rejected
+  with `SessionRunActiveError`, while independent sessions remain isolated.
 - Typed lifecycle seams for tool gates, streaming tool results, and runner hooks.
 - A recovery recipe in docs/06-recovery.md.
 - Deployment-specific crypto context, key stash, and SSE crypto removed from the
@@ -32,8 +34,8 @@ link here rather than duplicating this list.
    capabilities. Make create_run(id) idempotent without resetting resume evidence.
 3. Make persistence non-blocking by using asynchronous protocols or consistent
    thread offloading and batching.
-4. Correct shutdown completion behavior, make with_overrides preserve all relevant
-   configuration, and prevent concurrent runs for one session.
+4. Correct shutdown completion behavior and make with_overrides preserve all
+   relevant configuration.
 5. Close an interrupted LLM stream and prevent replay duplication after retry.
 6. Externalize user- and model-facing copy behind an injectable object with English
    defaults.

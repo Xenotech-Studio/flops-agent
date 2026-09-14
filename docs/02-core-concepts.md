@@ -53,6 +53,10 @@ async for delivery in run.subscribe():
 
 \`start()\` creates a background task and returns immediately. The runner completes model and tool work even with no subscriber. If this subscriber disconnects, another may attach to the same \`Run\`.
 
+Only one local Run may be active for a session. Starting another raises
+\`SessionRunActiveError\`, whose \`run_id\` identifies the existing Run; products
+that need per-session queuing should catch it and schedule their own retry.
+
 \`Query\` expresses only what is new:
 
 \`\`\`python

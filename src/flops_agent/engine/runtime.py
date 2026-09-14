@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, AsyncIterator, Callable, Dict, List, Mapping, Optional, Tuple, Type, Union, cast
 
-from .execution import Coalescer, Run, RunPool
+from .execution import Coalescer, Run, RunPool, SessionRunActiveError
 from flops_agent.entities.query import Query
 from .runner import Runner
 from flops_agent.seams.database import Database, sync_session
@@ -775,6 +775,9 @@ class Runtime:
         framework **does not interpret it** — same neutrality as the
         Database protocol.
         """
+        existing = self.runs.find(session.session_id)
+        if existing is not None and not existing.done:
+            raise SessionRunActiveError(session.session_id, existing.id)
         # run_class is the same kind of injection point as session_class: a
         # product's Run subclass can carry its own product fields; persistence
         # (RunStore) and lifecycle are handled by the base class mechanics.
