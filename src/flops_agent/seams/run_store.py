@@ -20,7 +20,14 @@ class RunStore(Protocol):
     """Persistence boundary for run logs and terminal state."""
 
     def create_run(self, run_id: str, owner_id: str, session_id: str) -> None:
-        """Register a new run with ``running`` status."""
+        """Create a run with ``running`` status if its id is not yet known.
+
+        This is idempotent by ``run_id``: a repeated call must return normally
+        and leave the existing metadata, log, stop intent, and recovery
+        evidence untouched. In particular, it must not turn an interrupted or
+        terminal run back into ``running``. ``run_id`` is a persistent replay
+        identity, not a name that may be recycled for a new run.
+        """
         ...
 
     def append_chunks(self, run_id: str, parts: List[str]) -> None:
@@ -123,6 +130,10 @@ class InMemoryRunStore:
 
     # Log segments and terminal state
     def create_run(self, run_id: str, owner_id: str, session_id: str) -> None:
+        # Construction is repeated when a process resumes the same Run. The
+        # first record, including its log and resume_count, remains authoritative.
+        if run_id in self._meta:
+            return
         self._meta[run_id] = RunMeta(run_id, owner_id, session_id, "running", time.time())
         self._buffers.setdefault(run_id, [])
         self._latest[(owner_id, session_id)] = run_id

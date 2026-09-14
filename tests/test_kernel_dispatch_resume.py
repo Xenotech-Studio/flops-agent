@@ -149,6 +149,35 @@ def test_no_records_means_no_resume_and_answer_takes_precedence():
     print("test_no_records_means_no_resume_and_answer_takes_precedence OK")
 
 
+def test_create_run_is_idempotent_and_preserves_recovery_evidence():
+    """A restart rebuilds the same Run without resetting its persistent identity."""
+    store = InMemoryRunStore()
+    store.create_run("r1", "u1", "s1")
+    store.append_chunks("r1", ["before-restart"])
+    store.request_stop("r1")
+    store.mark_interrupted("r1")
+    assert store.mark_resuming("r1") == 1
+    before = store.get_meta("r1")
+    assert before is not None
+
+    store.create_run("r1", "different-owner", "different-session")
+    after = store.get_meta("r1")
+    assert after is before
+    assert (after.owner_id, after.session_id, after.status, after.resume_count) == (
+        "u1", "s1", "running", 1,
+    )
+    assert store.buffer_range("r1", 0) == ["before-restart"]
+    assert store.stop_requested("r1")
+    assert store.get_latest_run_id("u1", "s1") == "r1"
+
+    store.mark_finished("r1")
+    finished_at = after.finished_at
+    store.create_run("r1", "u1", "s1")
+    assert after.status == "done" and after.finished_at == finished_at
+    print("test_create_run_is_idempotent_and_preserves_recovery_evidence OK")
+
+
 if __name__ == "__main__":
     test_dispatch_is_recorded_then_resumed_without_llm()
     test_no_records_means_no_resume_and_answer_takes_precedence()
+    test_create_run_is_idempotent_and_preserves_recovery_evidence()

@@ -31,6 +31,11 @@ Database answers “what did this conversation say?” RunStore answers “where
 
 Cross-process reconnection, stop intent, and restart recovery rely on optional RunStore capabilities. InMemoryRunStore is suitable for single-process demos and protocol tests. A production store is normally shared and keeps append_chunks(), buffer_range(), and status updates consistent for the same run id.
 
+`create_run(run_id, ...)` is create-if-absent. Repeating it for an existing id
+must succeed without changing its metadata, buffered output, stop intent, or
+resume evidence — even if the stored run is terminal. A run id is therefore a
+persistent replay identity and must never be recycled for a different turn.
+
 Capability support is deliberately incremental. Logs and terminal status are enough for a current process. Latest-run lookup and stop intent enable cross-worker stop requests. Active-run enumeration, resume counts, and dispatch records add restart recovery and duplicate-dispatch avoidance. Review the next two articles against the capabilities your deployment implements.
 
 ## Edit a Session safely

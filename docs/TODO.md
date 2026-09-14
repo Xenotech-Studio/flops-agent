@@ -20,6 +20,8 @@ link here rather than duplicating this list.
 - Fine-grained Database persistence and HistoryChanged notification.
 - One local Run per session: concurrent `Runtime.start()` calls are rejected
   with `SessionRunActiveError`, while independent sessions remain isolated.
+- RunStore creation is idempotent by run id and preserves all replay and
+  recovery evidence on a repeated creation call.
 - Typed lifecycle seams for tool gates, streaming tool results, and runner hooks.
 - A recovery recipe in docs/06-recovery.md.
 - Deployment-specific crypto context, key stash, and SSE crypto removed from the
@@ -31,7 +33,7 @@ link here rather than duplicating this list.
 1. Define typed protocols for ToolCall, StreamChunk, ToolResult, and RunMeta; reduce
    broad Any usage and extend the AgentEvent union for interaction events.
 2. Split RunStore into required logging and optional stop, recovery, and dispatch
-   capabilities. Make create_run(id) idempotent without resetting resume evidence.
+   capabilities.
 3. Make persistence non-blocking by using asynchronous protocols or consistent
    thread offloading and batching.
 4. Correct shutdown completion behavior and make with_overrides preserve all
