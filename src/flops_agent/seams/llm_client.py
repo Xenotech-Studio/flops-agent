@@ -8,12 +8,15 @@ cancellation cleanup and SSE emission.
 """
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from collections.abc import AsyncIterator
+from typing import Protocol, runtime_checkable
+
+from flops_agent.entities.contracts import StreamChunk
 
 
 @runtime_checkable
 class LLMStreamClient(Protocol):
-    async def acompletion(self, **completion_kwargs: Any) -> Any:
+    async def acompletion(self, **completion_kwargs: object) -> AsyncIterator[StreamChunk]:
         """Start one streaming completion and return an async iterable of chunks.
 
         Implementations sanitize wire data and retry transient failures while

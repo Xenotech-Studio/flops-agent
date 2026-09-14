@@ -50,6 +50,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, cast, Set
 
 from flops_agent.entities import events as _ev
+from flops_agent.entities.contracts import FinishStreamChunk, JSONMapping, StreamChunk, ToolCall
 from flops_agent.seams.database import sync_session
 from .execution import Run, RunStatus
 from .interaction import UNSET, Interaction, InteractionKind, InteractionRequest, StepPlan, ToolAction, ToolGate
@@ -121,8 +122,8 @@ class Runner:
         self.assistant_text = ""
         self.reasoning_text = ""
         self.finish_reason: Optional[str] = None
-        self.usage: Any = None
-        self.tool_calls: List[Any] = []
+        self.usage: Optional[JSONMapping] = None
+        self.tool_calls: List[ToolCall] = []
         self.stream_acc: Optional[StreamAccumulator] = None
         """The live accumulator for this step's streaming attempt (set by
         :meth:`stream_llm`, updated in place chunk by chunk).
@@ -445,7 +446,7 @@ class Runner:
             await self.on_stream_end()
             return True
 
-    async def consume_stream(self, request: Dict[str, Any], acc: Any) -> bool:
+    async def consume_stream(self, request: Dict[str, Any], acc: StreamAccumulator) -> bool:
         """One attempt: send the request, consume the whole stream, feed chunks
         into ``acc``.
 
@@ -1117,16 +1118,13 @@ class Runner:
         # changed here; if you do, update any byte-locked golden tests to match.
         return "\n\n".join(system_prompt)
 
-    async def on_chunk(self, chunk: Any) -> None:
-        """A raw chunk. usage / finish_reason / provider-private fields are only
-        visible here — they don't make it into the typed event stream, so this
-        override point is the only way to get at them."""
-        usage = getattr(chunk, "usage", None)
-        if usage is not None:
-            self.usage = usage
-        choices = getattr(chunk, "choices", None)
-        if choices and getattr(choices[0], "finish_reason", None):
-            self.finish_reason = choices[0].finish_reason
+    async def on_chunk(self, chunk: StreamChunk) -> None:
+        """Observe a typed provider chunk, including terminal token telemetry."""
+        if isinstance(chunk, FinishStreamChunk):
+            if chunk.usage is not None:
+                self.usage = chunk.usage
+            if chunk.reason is not None:
+                self.finish_reason = chunk.reason
 
     async def on_event(self, event: Any) -> Any:
         """A parsed event is about to be delivered. Return ``None`` to swallow
