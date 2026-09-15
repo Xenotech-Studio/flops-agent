@@ -17,3 +17,4 @@ dist/
 .eggs/
 pip-wheel-metadata/
 node_modules/
+website/dist/
