@@ -231,6 +231,13 @@ class ProjectionConfig:
     #: Regime B: the character floor that the latest user message is always allowed to keep,
     #: no matter how tight the remaining budget is.
     user_latest_msg_min_chars: int = 4_000
+    #: ``isMeta`` user messages are system-injected structured notifications (background-task
+    #: completions, forwarded WeChat messages, subagent summaries…), not free-text user
+    #: pastes. Middle-omitting them silently corrupts structured bodies (numbered lists,
+    #: key/value blocks) and — unlike a paste, whose source the agent can re-read — the elided
+    #: span is unrecoverable. So they skip the *soft* trim; genuine overflow is still caught by
+    #: the emergency hard-cap trim.
+    user_msg_soft_trim_exempt_meta: bool = True
     toolcall_args_soft_trim_enabled: bool = True
     toolcall_args_soft_trim_max_chars: int = 4_000
 
@@ -375,6 +382,12 @@ class ProjectionConfig:
 
     # ── Soft-trim for user text / tool_call arguments ─────────────────
 
+    def user_soft_trim_exempt(self, msg: Dict[str, Any]) -> bool:
+        """Whether this user message is exempt from the read-time soft-trim. See
+        ``user_msg_soft_trim_exempt_meta``: ``isMeta`` notifications are exempt so their
+        structured bodies are never middle-omitted."""
+        return bool(self.user_msg_soft_trim_exempt_meta and msg.get("isMeta"))
+
     def trim_user_content(self, content: Any, max_chars: int) -> Any:
         """A str is trimmed directly; a list form only trims text blocks and leaves image
         blocks alone (images are handled separately by apply_image_recency_policy)."""
@@ -518,7 +531,7 @@ class ProjectionConfig:
         role = msg.get("role") or ""
         if role == "user":
             content = msg.get("content")
-            if self.user_msg_soft_trim_enabled:
+            if self.user_msg_soft_trim_enabled and not self.user_soft_trim_exempt(msg):
                 budget = user_max_chars if user_max_chars is not None else self.user_msg_soft_trim_max_chars
                 content = self.trim_user_content(content, budget)
             text, imgs = content_text_and_image_count(content)
@@ -730,7 +743,7 @@ class ProjectionConfig:
                 meta_str = fmt(meta_val)
                 if meta_str:
                     out.append({"role": "system", "content": _METADATA_LINE_PREFIX + meta_str})
-                ub = _user_budget(idx)
+                ub = None if self.user_soft_trim_exempt(msg) else _user_budget(idx)
                 uc = msg.get("content")
                 out.append({"role": "user", "content": self.trim_user_content(uc, ub) if ub is not None else uc})
             else:
@@ -741,7 +754,7 @@ class ProjectionConfig:
                     tname = tc_id_to_name.get(tcid) if isinstance(tcid, str) else None
                     content = self.tool_text_for_tier(content, tool_tiers.get(idx), tool_name=tname)
                 elif role == "user":
-                    ub = _user_budget(idx)
+                    ub = None if self.user_soft_trim_exempt(msg) else _user_budget(idx)
                     if ub is not None:
                         content = self.trim_user_content(content, ub)
                 out.append({"role": role, "content": content})
