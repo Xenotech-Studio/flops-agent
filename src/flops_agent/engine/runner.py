@@ -26,6 +26,7 @@ Step                     Responsibility
 ======================  ==========================================================
 ``accept_query()``       Land this turn's contribution into history (skip if none)
 ``build_request()``      History + tools -> LLM request parameters
+``on_stream_open()``     LLM accepted the request and returned a stream, before its first chunk
 ``on_chunk()``           A raw chunk arrives (usage / finish_reason are only visible here)
 ``on_event()``           A parsed event is about to be delivered (rewrite or swallow it)
 ``consume_stream()``     Consume one attempt's full stream (retry orchestration stays in stream_llm)
@@ -465,6 +466,7 @@ class Runner:
         the retry loop itself still belongs to the framework.
         """
         stream = await self.runtime.llm.acompletion(**request)  # pyright: ignore[reportOptionalMemberAccess] —— a null llm here is a product-layer config error; let the caller observe it
+        await self.on_stream_open()
         async for chunk in stream:
             await self.on_chunk(chunk)
             if self.run.stop_requested:        # Consume before checking: don't lose usage / finish_reason carried on the last chunk
@@ -487,6 +489,15 @@ class Runner:
         client-side reset is delivered via the ``LLMStreamRetrying`` event through
         the wire layer (the product layer maps that event in to_sse).
         """
+
+    async def on_stream_open(self) -> None:
+        """The provider has accepted the request and yielded its stream handle.
+
+        Runs once per stream attempt, immediately before consuming its first
+        chunk. Product layers can use it for request-scoped liveness UI without
+        copying :meth:`consume_stream` and bypassing retry orchestration.
+        """
+        return None
 
     async def handle_tool_call(self, index: int, call: ToolCall) -> bool:
         """One tool call: gate -> execute (streaming) -> interaction -> shape -> write back.
