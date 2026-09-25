@@ -26,6 +26,7 @@ Step                     Responsibility
 ======================  ==========================================================
 ``accept_query()``       Land this turn's contribution into history (skip if none)
 ``build_request()``      History + tools -> LLM request parameters
+``before_llm_call()``    About to call the provider for this attempt; no network I/O for it yet
 ``on_stream_open()``     LLM accepted the request and returned a stream, before its first chunk
 ``on_chunk()``           A raw chunk arrives (usage / finish_reason are only visible here)
 ``on_event()``           A parsed event is about to be delivered (rewrite or swallow it)
@@ -465,6 +466,7 @@ class Runner:
         adjust consumption details (cancellation-check timing, event rewriting);
         the retry loop itself still belongs to the framework.
         """
+        await self.before_llm_call()
         stream = await self.runtime.llm.acompletion(**request)  # pyright: ignore[reportOptionalMemberAccess] —— a null llm here is a product-layer config error; let the caller observe it
         await self.on_stream_open()
         async for chunk in stream:
@@ -490,12 +492,31 @@ class Runner:
         the wire layer (the product layer maps that event in to_sse).
         """
 
+    async def before_llm_call(self) -> None:
+        """About to call the provider for this attempt — no network I/O for it
+        has happened yet.
+
+        Runs once per :meth:`consume_stream` attempt (including retries),
+        immediately before ``runtime.llm.acompletion(...)``. This is the
+        earliest point at which a product layer can start a "waiting for the
+        model" indicator: measured in production, ``acompletion(...)``
+        frequently does not return until the provider's response is already
+        available (the whole wait happens inside the call, not while
+        iterating its chunks) — see :meth:`on_stream_open`, which fires too
+        late for that case to give any such indicator real wall-clock time to
+        run before the first chunk arrives.
+        """
+        return None
+
     async def on_stream_open(self) -> None:
         """The provider has accepted the request and yielded its stream handle.
 
         Runs once per stream attempt, immediately before consuming its first
-        chunk. Product layers can use it for request-scoped liveness UI without
-        copying :meth:`consume_stream` and bypassing retry orchestration.
+        chunk. Kept for product layers that need "stream handle obtained"
+        specifically; for a "waiting for the model" indicator prefer
+        :meth:`before_llm_call` instead — depending on the provider client,
+        this hook can fire only milliseconds before the first chunk (see its
+        docstring).
         """
         return None
 
