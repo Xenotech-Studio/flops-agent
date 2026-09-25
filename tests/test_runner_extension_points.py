@@ -127,6 +127,27 @@ def test_on_stream_end_runs_before_reply_is_built():
     print("test_on_stream_end_runs_before_reply_is_built OK")
 
 
+def test_on_stream_open_runs_after_request_before_first_chunk():
+    """流已建立钩子夹在 acompletion 与首 chunk 之间，产品无需覆写 consume_stream。"""
+    order = []
+
+    class OpeningRunner(Runner):
+        async def on_stream_open(self):
+            order.append("open")
+
+        async def on_chunk(self, raw_chunk):
+            order.append("chunk")
+            await super().on_chunk(raw_chunk)
+
+    async def go():
+        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]), runner=OpeningRunner)
+        await runtime.start(Session("s1"), Query.text("q")).wait()
+        assert order == ["open", "chunk"]
+
+    _run(go())
+    print("test_on_stream_open_runs_after_request_before_first_chunk OK")
+
+
 # ── Gap 3: rewriting the whole list before dispatch ──────────────────────────
 
 def test_prepare_dispatch_can_insert_prerequisite_call():
