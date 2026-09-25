@@ -148,6 +148,32 @@ def test_on_stream_open_runs_after_request_before_first_chunk():
     print("test_on_stream_open_runs_after_request_before_first_chunk OK")
 
 
+def test_before_llm_call_runs_before_acompletion_and_on_stream_open():
+    """before_llm_call 必须先于 acompletion 调用发生——它是产品层起「等待模型」指示器
+    最早也最可靠的挂钩点：acompletion 经常要等供应商响应就绪才返回，返回后到首个
+    chunk 之间可能只有几毫秒，on_stream_open 那时才起指示器往往已经来不及。"""
+    order = []
+
+    class BeforeCallRunner(Runner):
+        async def before_llm_call(self):
+            order.append("before_call")
+
+        async def on_stream_open(self):
+            order.append("open")
+
+        async def on_chunk(self, raw_chunk):
+            order.append("chunk")
+            await super().on_chunk(raw_chunk)
+
+    async def go():
+        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]), runner=BeforeCallRunner)
+        await runtime.start(Session("s1"), Query.text("q")).wait()
+        assert order == ["before_call", "open", "chunk"]
+
+    _run(go())
+    print("test_before_llm_call_runs_before_acompletion_and_on_stream_open OK")
+
+
 # ── Gap 3: rewriting the whole list before dispatch ──────────────────────────
 
 def test_prepare_dispatch_can_insert_prerequisite_call():
