@@ -18,3 +18,6 @@ dist/
 pip-wheel-metadata/
 node_modules/
 website/dist/
+
+# local agent workspace
+.flops/
