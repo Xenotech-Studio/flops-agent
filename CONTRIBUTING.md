@@ -53,8 +53,7 @@ include a matching `BREAKING CHANGE:` footer.
 
 ## Pull requests
 
-The repository is currently private, but contributions should follow the normal
-pull-request workflow:
+Contributions are welcome through the standard pull-request workflow:
 
 1. Create a focused branch from the current default branch.
 2. Add or update tests and documentation with the change.
