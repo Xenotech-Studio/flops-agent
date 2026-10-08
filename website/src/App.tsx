@@ -119,7 +119,7 @@ function App() {
 
       <header className="site-header" id="top">
         <a className="brand" href="#top" aria-label="flops-agent 首页">
-          <img className="brand-mark" src="/favicon-64.png" width="31" height="31" alt="" aria-hidden="true" />
+          <img className="brand-mark" src="/favicon-64.png?v=9339b14ffac0" width="31" height="31" alt="" aria-hidden="true" />
           <span>flops-agent</span>
         </a>
         <nav className="header-nav" aria-label="主导航">
