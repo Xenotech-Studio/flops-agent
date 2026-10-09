@@ -21,3 +21,8 @@ website/dist/
 
 # local agent workspace
 .flops/
+
+# Generated documentation (local clone → website)
+website/src/content/docs/
+website/public/docs-source/
+website/public/docs-index.json

@@ -46,17 +46,6 @@ async def main() -> None:
 
 asyncio.run(main())`
 
-const documents = [
-  { number: '01', title: '五分钟运行一个 Agent', original: 'Run an Agent in Five Minutes', file: '01-quick-start.md' },
-  { number: '02', title: '核心概念', original: 'Core Concepts', file: '02-core-concepts.md' },
-  { number: '03', title: '流式事件与 SSE', original: 'Streaming and SSE', file: '03-streaming-and-sse.md' },
-  { number: '04', title: '会话与持久化', original: 'Sessions and Persistence', file: '04-sessions-and-persistence.md' },
-  { number: '05', title: '取消、挂起与继续执行', original: 'Cancellation, Suspension, and Continuing a Turn', file: '05-cancellation-and-suspension.md' },
-  { number: '06', title: '进程重启后的恢复', original: 'Restart Recovery', file: '06-recovery.md' },
-  { number: '07', title: '扩展框架', original: 'Extend the Framework', file: '07-extending.md' },
-  { number: '08', title: '完整示例导读', original: 'Worked Example', file: '08-worked-example.md' },
-  { number: 'API', title: '公开 API 契约', original: 'Public API surface', file: 'api_surface.md' },
-]
 
 function CopyButton({ text }: { text: string }) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
@@ -124,7 +113,7 @@ function App() {
         </a>
         <nav className="header-nav" aria-label="主导航">
           <a href="#quick-start">快速开始</a>
-          <a href="#docs">文档</a>
+          <a href="/docs">文档</a>
         </nav>
         <div className="public-links" aria-label="项目链接">
           <a href="https://github.com/Xenotech-Studio/flops-agent" title="GitHub 公开仓库 · MIT">GitHub <span className="external-mark" aria-hidden="true">↗</span></a>
@@ -301,7 +290,7 @@ function App() {
           <p><code>docs/sample_product/server.py</code> 随公开仓库提供，不包含在 PyPI 包中。要观察文本、工具和结束事件的 SSE 输出，先克隆仓库，再在仓库根目录安装源码依赖并运行脚本。</p>
           <CodeBlock title="获取源码并运行仓库示例" language="SHELL" code={repositoryExample} />
           <p className="aside-note"><code>server.py</code> 默认使用 ScriptedLLM；保持 <code>EXAMPLE_PROVIDER_API_KEY</code> 未设置即可运行离线演示。它不监听网络端口，执行器演示与 HTML 客户端参考仍需产品层接线，尚不是完整三进程成品。</p>
-          <p className="source-note">阅读：<a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/01-quick-start.md">快速开始</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/api_surface.md">公开 API 契约</a></p>
+          <p className="source-note">阅读：<a href="/docs/01-quick-start">快速开始</a> · <a href="/docs/api_surface">公开 API 契约</a></p>
         </section>
 
         <section className="section" id="progress">
@@ -320,7 +309,7 @@ function App() {
               <li><strong>稳定 API 与服务承诺</strong><span>Beta 表示仍在演进，所以不承诺版本兼容；SLA 是服务级别保证，目前不提供。</span></li>
             </ul></article>
           </div>
-          <p className="source-note">阅读：<a href="https://github.com/Xenotech-Studio/flops-agent">GitHub 公开仓库</a> · <a href="https://pypi.org/project/flops-agent/0.2.0/">PyPI 0.2.0</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/08-worked-example.md">完整示例导读</a></p>
+          <p className="source-note">阅读：<a href="https://github.com/Xenotech-Studio/flops-agent">GitHub 公开仓库</a> · <a href="https://pypi.org/project/flops-agent/0.2.0/">PyPI 0.2.0</a> · <a href="/docs/08-worked-example">完整示例导读</a></p>
         </section>
 
         <section className="section" id="non-goals">
@@ -370,24 +359,13 @@ function App() {
             <p><code>WireCodec</code> 将事件编码为标准 SSE，也就是可逐条送达客户端的消息格式；所以产品可以复用输出约定，再接自己的服务路由。<code>run.subscribe(from_cursor=...)</code> 从保存的位置回放并继续订阅；cursor 是服务端给出的日志位置，所以客户端应保存它，不能靠数消息猜测。</p>
             <p className="aside-note">当前没有按 <code>run_id</code> 从共享存储还原只读 Run 的门面，也就是直接读取既有执行的统一入口；所以多 worker（多个服务进程）场景要由产品层定位执行所在进程，或实现自己的回放路由。默认 SSE 回放帧不补发 cursor，所以仅收到回放就关闭的客户端仍需产品层提供游标策略。</p>
           </div>
-          <p className="source-note">阅读：<a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/02-core-concepts.md">核心概念</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/03-streaming-and-sse.md">流式事件与 SSE</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/05-cancellation-and-suspension.md">取消与挂起</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/06-recovery.md">重启恢复</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/07-extending.md">扩展框架</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/api_surface.md">公开 API 契约</a></p>
+          <p className="source-note">阅读：<a href="/docs/02-core-concepts">核心概念</a> · <a href="/docs/03-streaming-and-sse">流式事件与 SSE</a> · <a href="/docs/05-cancellation-and-suspension">取消与挂起</a> · <a href="/docs/06-recovery">重启恢复</a> · <a href="/docs/07-extending">扩展框架</a> · <a href="/docs/api_surface">公开 API 契约</a></p>
         </section>
 
         <section className="section docs-section" id="docs">
           <SectionHeading number="10" label="阅读 / DOCUMENTATION" title="从一轮执行，读到产品边界。" />
-          <p className="section-intro">从快速开始到完整示例，再到公开 API 契约。以下文档均可在 GitHub 直接阅读。</p>
-          <a className="docs-index" href="https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/README.md"><div><span className="small-label">阅读起点</span><strong>文档索引与阅读顺序</strong></div><span className="doc-open">在 GitHub 阅读 <span aria-hidden="true">↗</span></span></a>
-          <ol className="docs-list">
-            {documents.map((doc) => (
-              <li key={doc.file}>
-                <a className="doc-link" href={`https://github.com/Xenotech-Studio/flops-agent/blob/master/docs/${doc.file}`}>
-                  <span className="doc-number" aria-hidden="true">{doc.number}</span>
-                  <div className="doc-description"><h3>{doc.title}</h3><p lang="en">{doc.original}</p></div>
-                  <span className="doc-open">阅读 <span aria-hidden="true">↗</span></span>
-                </a>
-              </li>
-            ))}
-          </ol>
+          <p className="section-intro">从快速开始到完整示例，按顺序理解框架的执行、存储与扩展边界。</p>
+          <a className="docs-index" href="/docs"><div><span className="small-label">阅读起点</span><strong>进入文档区</strong></div><span className="doc-open">开始阅读 →</span></a>
         </section>
       </main>
 

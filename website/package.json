@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "docs:sync": "node scripts/sync-docs.mjs",
+    "prebuild": "npm run docs:sync",
+    "predev": "npm run docs:sync"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
