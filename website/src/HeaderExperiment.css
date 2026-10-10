@@ -1,0 +1,25 @@
+/* Home-only optical bleed; other pages retain their content-container width.
+   Desktop presets (per side): 16px / 32px / 48px; selected: 32px.
+   Mobile presets: 0 = current 111px; 1 = compact 95px (two 36px rows).
+   Change either variable independently; no markup or route changes needed. */
+:root {
+  --header-bleed: 32px;
+  --header-mobile-compact: 0;
+}
+
+@media (min-width: 1025px) {
+  .home-header .site-header-inner {
+    width: min(
+      calc(min(var(--page-container), calc(100% - 2 * var(--page-gutter))) + 2 * var(--header-bleed)),
+      calc(100% - 2 * var(--page-gutter))
+    );
+  }
+}
+
+@media (max-width: 580px) {
+  .site-header .site-header-inner {
+    min-height: calc(110px - 16px * var(--header-mobile-compact));
+    padding-block: calc(14px - 6px * var(--header-mobile-compact));
+    row-gap: calc(10px - 4px * var(--header-mobile-compact));
+  }
+}

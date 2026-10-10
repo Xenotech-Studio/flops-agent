@@ -1,7 +1,7 @@
 .docs-header .site-header-inner { gap: 40px; }
 .docs-page button, .docs-header button { cursor: pointer; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; padding: 7px 12px; font-size: 12px; }
 .docs-page button:hover, .docs-header button:hover { background: #f5f5f5; }
-.docs-search-button { margin-left: auto; }
+.docs-header .docs-search-button { margin-left: auto; min-height: 36px; font-size: 15px; line-height: 20px; display: flex; align-items: center; justify-content: space-between; }
 .docs-search-button kbd { margin-left: 18px; color: #737373; font-size: 10px; }
 .docs-layout { width: min(var(--page-container), calc(100% - 2 * var(--page-gutter))); margin: auto; padding: 36px 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) 190px; gap: 44px; align-items: start; }
 .docs-sidebar, .docs-outline { position: sticky; top: 24px; max-height: calc(100dvh - 48px); overflow-y: auto; scrollbar-width: thin; }
@@ -53,7 +53,7 @@
 .docs-not-found { padding: 50px 0; }
 @media (max-width: 1200px) { .docs-layout { grid-template-columns: 220px minmax(0, 1fr); gap: 32px; } .docs-outline { display: none; } }
 @media (max-width: 760px) {
-  .docs-header .site-header-inner { flex-wrap: wrap; gap: 10px 20px; padding: 15px 0; }
+  .docs-header .site-header-inner { flex-wrap: wrap; gap: 10px 20px; }
   .docs-header .brand { font-size: 16px; }
   .docs-header .header-nav { margin-left: auto; gap: 14px; }
   .docs-search-button { width: 100%; text-align: left; margin: 0; }

@@ -58,12 +58,14 @@ section { scroll-margin-top: 1rem; }
 @media (prefers-reduced-motion: reduce) {
   .site-header-inner { transition: none; }
 }
-.site-header-inner { min-height: 90px; display: flex; align-items: center; gap: 40px; }
+.site-header-inner { padding-block: 14px; display: flex; align-items: center; gap: 40px; }
 .home-layout .page-column { width: 100%; }
 
 .brand { color: var(--ink); display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 17px; font-weight: 650; letter-spacing: -.055em; }
 .brand-mark { display: block; width: 31px; height: 31px; object-fit: contain; }
-.header-nav { display: flex; gap: 25px; font-size: 13px; }
+.header-nav { display: flex; gap: 25px; font-size: 15px; }
+.site-header .brand { min-height: 36px; }
+.site-header :is(.header-nav a, .public-links a) { display: inline-flex; align-items: center; min-height: 36px; line-height: 24px; padding-block: 6px; }
 .public-links { margin-left: auto; display: flex; align-items: center; gap: 19px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .external-mark { margin-left: 3px; color: #262626; }
 .link-status { border: 1px solid var(--line); padding: 2px 7px; border-radius: 4px; font-size: 10px; }
@@ -250,9 +252,9 @@ td p { line-height: 1.85; }
 @media (max-width: 580px) {
   body { font-size: 14px; }
   .page-column { width: calc(100% - 40px); }
-  .site-header-inner { min-height: 104px; padding-block: 15px; gap: 10px 20px; flex-wrap: wrap; }
+  .site-header-inner { gap: 10px 20px; flex-wrap: wrap; }
   .brand { font-size: 16px; }
-  .header-nav { margin-left: auto; font-size: 12px; }
+  .header-nav { margin-left: auto; }
   .public-links { flex-basis: 100%; justify-content: flex-end; font-size: 10px; gap: 15px; }
   .hero { padding-top: 46px; padding-bottom: 30px; }
   .hero-eyebrow { font-size: 10px; gap: 10px; margin-bottom: 20px; }

@@ -1,0 +1,73 @@
+/* A. Home hierarchy: independent of container widths and responsive breakpoints. */
+.home-layout .metadata { gap: 6px 8px; }
+.home-layout .metadata li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fafafa;
+  line-height: 1.6;
+}
+.home-layout .metadata li + li::before { content: none; }
+.home-layout .hero-principle { border-top-style: solid; }
+@media (min-width: 1025px) {
+  .home-layout .hero { padding-block: 80px 40px; }
+  .home-layout .hero h1 { line-height: 1.35; margin-left: 0; }
+  .home-layout .hero-copy { margin-top: 24px; }
+  .home-layout .hero-actions { margin-top: 32px; }
+  .home-layout .hero-principle { margin-top: 40px; padding-top: 24px; }
+  .home-layout .section { padding-block: 64px; }
+}
+
+/* B. Surfaces: one radius for content, a smaller radius for controls. */
+.home-layout :is(.product-card, .table-scroll, .code-window, .expected-output, .progress-panel),
+.docs-prose pre, .docs-table { border-radius: 8px; }
+.home-layout .button,
+.docs-page button, .docs-header button { border-radius: 6px; }
+.home-layout .expected-output { border-style: solid; }
+.home-layout .code-bar { border-bottom-color: #383838; }
+.home-layout :is(.product-card, .docs-index):hover { border-color: var(--color-border-strong); }
+
+/* C. Document navigation: separate selected state from hover. */
+.docs-group > p, .docs-outline p { color: #626262; font-weight: 600; }
+.docs-group a { margin-left: 0; border-radius: 0 6px 6px 0; }
+.docs-group a:hover { background: #f7f7f7; border-left-color: #b3b3b3; }
+.docs-group a[aria-current="page"] {
+  background: #eeeeee;
+  border-left-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+.docs-outline a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.docs-breadcrumb { color: #626262; }
+
+/* D. Reading details: keep the document columns and mobile measure intact. */
+.docs-prose { line-height: 1.85; }
+.docs-prose h2 { margin-top: 40px; padding-top: 16px; }
+.docs-prose h3 { margin-top: 32px; }
+.docs-prose a { text-decoration-color: #a3a3a3; text-decoration-thickness: 1px; }
+.docs-prose a:hover { text-decoration-color: var(--ink); }
+.docs-prose :not(pre) > code { background: #f4f4f4; border: 1px solid #e5e5e5; padding: 1px 4px; border-radius: 4px; }
+.docs-prose pre { line-height: 1.8; border-color: #dedede; }
+.docs-prose blockquote { border-left-color: #d4d4d4; }
+.docs-table { border: 1px solid var(--line); }
+.docs-table th, .docs-table td { border-inline: 0; }
+.docs-table th + th, .docs-table td + td { border-left: 1px solid var(--line); }
+.docs-prose pre, .docs-table, .home-layout .table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #b3b3b3 #f5f5f5;
+}
+.home-layout .code-window pre { scrollbar-width: thin; scrollbar-color: #737373 #1c1c1c; }
+.docs-prose pre:focus-visible, .docs-table:focus-visible,
+.home-layout .table-scroll:focus-visible { outline-offset: -3px; }
+
+/* E. Page endings: quiet, bounded navigation and a consistent spacing rhythm. */
+.docs-pagination { gap: 16px; padding-top: 24px; margin-top: 48px; }
+.docs-pagination a { padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
+.docs-pagination a:hover { background: #f7f7f7; }
+.docs-footer { padding-top: 24px; margin-top: 32px; }
+.site-footer { padding-block: 32px; }
+
+/* No added motion; retain the existing reduced-motion behavior. */
