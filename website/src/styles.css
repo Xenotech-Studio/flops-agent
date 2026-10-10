@@ -54,7 +54,8 @@ section { scroll-margin-top: 1rem; }
 .site-header-inner, .home-layout { width: min(var(--page-container), calc(100% - 2 * var(--page-gutter))); margin-inline: auto; }
 .home-header, .home-layout { --page-container: 760px; }
 .site-header { width: 100%; border-bottom: 1px solid var(--line); }
-.site-header-inner { transition: width 320ms ease-in-out; }
+:root { --route-duration: 180ms; --route-easing: ease-in-out; }
+.site-header-inner { transition: width var(--route-duration) var(--route-easing); }
 @media (prefers-reduced-motion: reduce) {
   .site-header-inner { transition: none; }
 }
