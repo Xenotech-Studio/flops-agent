@@ -8,13 +8,13 @@
   border: 1px solid var(--line);
   border-radius: 4px;
   background: #fafafa;
-  line-height: 1.6;
+
 }
 .home-layout .metadata li + li::before { content: none; }
 .home-layout .hero-principle { border-top-style: solid; }
 @media (min-width: 1025px) {
   .home-layout .hero { padding-block: 80px 40px; }
-  .home-layout .hero h1 { line-height: 1.35; margin-left: 0; }
+  .home-layout .hero h1 { margin-left: 0; }
   .home-layout .hero-copy { margin-top: 24px; }
   .home-layout .hero-actions { margin-top: 32px; }
   .home-layout .hero-principle { margin-top: 40px; padding-top: 24px; }
@@ -31,26 +31,26 @@
 .home-layout :is(.product-card, .docs-index):hover { border-color: var(--color-border-strong); }
 
 /* C. Document navigation: separate selected state from hover. */
-.docs-group > p, .docs-outline p { color: #626262; font-weight: 600; }
+.docs-group > p, .docs-outline p { color: #626262; }
 .docs-group a { margin-left: 0; border-radius: 0 6px 6px 0; }
 .docs-group a:hover { background: #f7f7f7; border-left-color: #b3b3b3; }
 .docs-group a[aria-current="page"] {
   background: #eeeeee;
   border-left-color: var(--ink);
   color: var(--ink);
-  font-weight: 600;
+
 }
 .docs-outline a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .docs-breadcrumb { color: #626262; }
 
 /* D. Reading details: keep the document columns and mobile measure intact. */
-.docs-prose { line-height: 1.85; }
+
 .docs-prose h2 { margin-top: 40px; padding-top: 16px; }
 .docs-prose h3 { margin-top: 32px; }
 .docs-prose a { text-decoration-color: #a3a3a3; text-decoration-thickness: 1px; }
 .docs-prose a:hover { text-decoration-color: var(--ink); }
 .docs-prose :not(pre) > code { background: #f4f4f4; border: 1px solid #e5e5e5; padding: 1px 4px; border-radius: 4px; }
-.docs-prose pre { line-height: 1.8; border-color: #dedede; }
+.docs-prose pre { border-color: #dedede; }
 .docs-prose blockquote { border-left-color: #d4d4d4; }
 .docs-table { border: 1px solid var(--line); }
 .docs-table th, .docs-table td { border-inline: 0; }
