@@ -107,6 +107,7 @@ function App() {
       <a className="skip-link" href="#content">跳到正文</a>
 
       <header className="site-header" id="top">
+        <div className="site-header-inner">
         <a className="brand" href="#top" aria-label="flops-agent 首页">
           <img className="brand-mark" src="/favicon-64.png?v=9339b14ffac0" width="31" height="31" alt="" aria-hidden="true" />
           <span>flops-agent</span>
@@ -120,8 +121,10 @@ function App() {
           <a href="https://pypi.org/project/flops-agent/" title="PyPI · flops-agent 0.2.0">PyPI <span className="external-mark" aria-hidden="true">↗</span></a>
           <span className="link-status">MIT · 0.2.0</span>
         </div>
+        </div>
       </header>
 
+      <div className="home-layout">
       <main id="content" className="page-column">
         <section className="hero" aria-labelledby="hero-title">
           <p className="eyebrow hero-eyebrow"><span className="status-dot" aria-hidden="true" />独立的 Python 框架<span className="eyebrow-separator">/</span>flops_agent</p>
@@ -368,6 +371,7 @@ function App() {
           <a className="docs-index" href="/docs"><div><span className="small-label">阅读起点</span><strong>进入文档区</strong></div><span className="doc-open">开始阅读 →</span></a>
         </section>
       </main>
+      </div>
 
       <footer className="site-footer page-column">
         <div className="footer-top"><a className="brand" href="#top">flops-agent</a><span>© 2026 Xenotech Studio · MIT License</span><a className="back-to-top" href="#top">回到顶部 ↑</a></div>

@@ -8,6 +8,8 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   color-scheme: light;
+  --page-container: 1320px;
+  --page-gutter: 32px;
   --ink: #1c1c1c;
   --muted: #525252;
   --color-bg: #ffffff;
@@ -48,7 +50,12 @@ section { scroll-margin-top: 1rem; }
 .skip-link { position: fixed; top: -100px; left: 20px; z-index: 10; padding: 10px 20px; background: var(--color-accent); color: white; }
 .skip-link:focus { top: 12px; color: white; }
 
-.site-header { width: min(1040px, calc(100% - 48px)); margin-inline: auto; min-height: 91px; display: flex; align-items: center; gap: 40px; border-bottom: 1px solid var(--line); }
+/* One outer boundary for both routes; the homepage keeps its reading measure. */
+.site-header, .home-layout { width: min(var(--page-container), calc(100% - 2 * var(--page-gutter))); margin-inline: auto; }
+.site-header { border-bottom: 1px solid var(--line); }
+.site-header-inner { width: 100%; min-height: 90px; display: flex; align-items: center; gap: 40px; }
+.home-layout .page-column { width: min(760px, 100%); }
+
 .brand { color: var(--ink); display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 17px; font-weight: 650; letter-spacing: -.055em; }
 .brand-mark { display: block; width: 31px; height: 31px; object-fit: contain; }
 .header-nav { display: flex; gap: 25px; font-size: 13px; }
@@ -225,7 +232,8 @@ td p { line-height: 1.85; }
 .site-footer > p { font-size: 11px; margin-top: 13px; }
 
 @media (max-width: 760px) {
-  .site-header { gap: 24px; }
+  :root { --page-gutter: 20px; }
+  .site-header-inner { gap: 24px; }
   .public-links { gap: 12px; }
   .link-status { font-size: 9px; }
   .header-nav { gap: 14px; }
@@ -235,8 +243,8 @@ td p { line-height: 1.85; }
 
 @media (max-width: 580px) {
   body { font-size: 14px; }
-  .site-header, .page-column { width: calc(100% - 36px); }
-  .site-header { min-height: 105px; padding-block: 15px; gap: 10px 20px; flex-wrap: wrap; }
+  .page-column { width: calc(100% - 40px); }
+  .site-header-inner { min-height: 104px; padding-block: 15px; gap: 10px 20px; flex-wrap: wrap; }
   .brand { font-size: 16px; }
   .header-nav { margin-left: auto; font-size: 12px; }
   .public-links { flex-basis: 100%; justify-content: flex-end; font-size: 10px; gap: 15px; }

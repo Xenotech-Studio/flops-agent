@@ -1,9 +1,9 @@
-.docs-header { width: min(1440px, calc(100% - 64px)); gap: 32px; }
+.docs-header .site-header-inner { gap: 32px; }
 .docs-page button { cursor: pointer; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; padding: 7px 12px; font-size: 12px; }
 .docs-page button:hover { background: #f5f5f5; }
 .docs-search-button { margin-left: auto; }
 .docs-search-button kbd { margin-left: 18px; color: #737373; font-size: 10px; }
-.docs-layout { max-width: 1440px; margin: auto; padding: 36px 32px; display: grid; grid-template-columns: 240px minmax(0, 760px) 190px; gap: 44px; align-items: start; }
+.docs-layout { width: min(var(--page-container), calc(100% - 2 * var(--page-gutter))); margin: auto; padding: 36px 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) 190px; gap: 44px; align-items: start; }
 .docs-sidebar, .docs-outline { position: sticky; top: 24px; max-height: calc(100dvh - 48px); overflow-y: auto; scrollbar-width: thin; }
 .docs-group { margin-bottom: 24px; }
 .docs-group > p, .docs-outline p { font-size: 11px; color: #737373; margin-bottom: 10px; letter-spacing: .06em; }
@@ -53,12 +53,12 @@
 .docs-not-found { padding: 50px 0; }
 @media (max-width: 1200px) { .docs-layout { grid-template-columns: 220px minmax(0, 1fr); gap: 32px; } .docs-outline { display: none; } }
 @media (max-width: 760px) {
-  .docs-header { width: calc(100% - 32px); flex-wrap: wrap; gap: 14px; padding: 18px 0; }
+  .docs-header .site-header-inner { flex-wrap: wrap; gap: 10px 20px; padding: 15px 0; }
   .docs-header .brand { font-size: 16px; }
   .docs-header .header-nav { margin-left: auto; gap: 16px; }
   .docs-search-button { width: 100%; text-align: left; margin: 0; }
   .docs-search-button kbd { float: right; }
-  .docs-layout { display: block; padding: 20px 20px 32px; }
+  .docs-layout { display: block; padding: 20px 0 32px; }
   .docs-sidebar { position: static; max-height: none; margin-bottom: 28px; }
   .docs-page .docs-menu-toggle { display: flex; justify-content: space-between; width: 100%; padding: 10px 12px; }
   .docs-sidebar nav { display: none; padding: 20px 10px 0; }
