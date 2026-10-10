@@ -1,0 +1,33 @@
+[
+  {
+    "id": "framework",
+    "title": "文档概览",
+    "order": 0,
+    "kind": "use",
+    "navigation": false
+  },
+  {
+    "id": "quick-start",
+    "title": "快速开始",
+    "order": 10,
+    "kind": "use"
+  },
+  {
+    "id": "guide",
+    "title": "指南",
+    "order": 20,
+    "kind": "use"
+  },
+  {
+    "id": "api",
+    "title": "API 契约",
+    "order": 30,
+    "kind": "contract"
+  },
+  {
+    "id": "changelog",
+    "title": "更新内容",
+    "order": 40,
+    "kind": "use"
+  }
+]

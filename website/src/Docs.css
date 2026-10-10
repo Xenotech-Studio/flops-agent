@@ -70,3 +70,13 @@
   .docs-pagination { gap: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Region links retain flat document URLs and share the document container. */
+.docs-area-bar { border-bottom: 1px solid var(--line); }
+.docs-area-inner { width: min(var(--page-container), calc(100% - 2 * var(--page-gutter))); margin-inline: auto; display: flex; gap: 28px; overflow-x: auto; scrollbar-width: thin; }
+.docs-area-inner a { flex: 0 0 auto; display: flex; align-items: center; min-height: 45px; padding: 10px 0; border-bottom: 2px solid transparent; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.docs-area-inner a:hover { color: var(--ink); }
+.docs-area-inner a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.docs-area-inner a:focus-visible { outline-offset: -3px; }
+@media (max-width: 760px) { .docs-area-inner { gap: 24px; } }
+@media print { .docs-area-bar { display: none; } }

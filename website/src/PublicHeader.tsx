@@ -12,7 +12,7 @@ export default function PublicHeader({ docs }: { docs: boolean }) {
           <span>flops-agent</span>
         </a>
         <nav className="header-nav" aria-label="主导航">
-          <a href={docs ? '/#quick-start' : '#quick-start'}>快速开始</a>
+          <a href={docs ? '/' : '#quick-start'}>{docs ? '首页' : '快速开始'}</a>
           <a href="/docs" aria-current={docs ? 'page' : undefined}>文档</a>
         </nav>
         {docs ? <button className="docs-search-button" onClick={() => window.dispatchEvent(new Event(DOCS_SEARCH_EVENT))}>搜索文档 <kbd>⌘ K / Ctrl K</kbd></button> :

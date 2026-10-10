@@ -2,52 +2,63 @@
   {
     "file": "README.md",
     "slug": "overview",
-    "group": "阅读起点"
+    "group": "阅读起点",
+    "section": "framework",
+    "overview": true
   },
   {
     "file": "01-quick-start.md",
     "slug": "01-quick-start",
-    "group": "入门"
+    "group": "入门",
+    "section": "quick-start"
   },
   {
     "file": "02-core-concepts.md",
     "slug": "02-core-concepts",
-    "group": "入门"
+    "group": "入门",
+    "section": "guide"
   },
   {
     "file": "03-streaming-and-sse.md",
     "slug": "03-streaming-and-sse",
-    "group": "核心机制"
+    "group": "核心机制",
+    "section": "guide"
   },
   {
     "file": "04-sessions-and-persistence.md",
     "slug": "04-sessions-and-persistence",
-    "group": "核心机制"
+    "group": "核心机制",
+    "section": "guide"
   },
   {
     "file": "05-cancellation-and-suspension.md",
     "slug": "05-cancellation-and-suspension",
-    "group": "核心机制"
+    "group": "核心机制",
+    "section": "guide"
   },
   {
     "file": "06-recovery.md",
     "slug": "06-recovery",
-    "group": "核心机制"
+    "group": "核心机制",
+    "section": "guide"
   },
   {
     "file": "07-extending.md",
     "slug": "07-extending",
-    "group": "扩展与参考"
+    "group": "扩展与参考",
+    "section": "guide"
   },
   {
     "file": "08-worked-example.md",
     "slug": "08-worked-example",
-    "group": "扩展与参考"
+    "group": "扩展与参考",
+    "section": "guide"
   },
   {
     "file": "api_surface.md",
     "slug": "api_surface",
-    "group": "扩展与参考"
+    "group": "扩展与参考",
+    "section": "api"
   },
   {
     "file": "CHANGELOG.md",
@@ -56,6 +67,7 @@
     "drop_sections": [
       "## [Unreleased]"
     ],
-    "publication_note": "只列出已发布版本；未发布的改动不在此列。"
+    "publication_note": "只列出已发布版本；未发布的改动不在此列。",
+    "section": "changelog"
   }
 ]
