@@ -5,6 +5,7 @@ import './styles.css'
 import './VisualPolish.css'
 import './HeaderExperiment.css'
 import './Typography.css'
+import './Theme.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

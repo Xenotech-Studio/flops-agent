@@ -2,6 +2,19 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Keep storage key and normalization aligned with ThemeToggle.tsx.
+      (() => {
+        let mode = 'system';
+        try { const saved = localStorage.getItem('flops-agent.colorTheme'); if (saved === 'light' || saved === 'dark') mode = saved; } catch {}
+        const theme = mode === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : mode;
+        const root = document.documentElement;
+        root.dataset.theme = theme;
+        root.dataset.themeMode = mode;
+        root.style.colorScheme = theme;
+        root.style.backgroundColor = theme === 'dark' ? '#141414' : '#ffffff';
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
