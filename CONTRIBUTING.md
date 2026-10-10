@@ -4,6 +4,12 @@ Thanks for contributing. This repository is a Python 3.10+ project; please keep
 the framework independent of any particular application, deployment, or
 configuration source.
 
+## Language
+
+Write documentation, website copy, user-facing strings, and commit messages in
+English. This is a public OSS repository; reserve Chinese for other internal or
+product contexts.
+
 ## Development setup
 
 From a fresh checkout, create and activate a virtual environment, then run:
@@ -41,7 +47,7 @@ use `--no-verify` to bypass them.
 
 ## Commits
 
-Use Conventional Commit-style subjects:
+Write commit messages in English and use Conventional Commit-style subjects:
 
 ```text
 type(scope): concise imperative description
@@ -50,6 +56,16 @@ type(scope): concise imperative description
 Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
 `build`, `ci`, `chore`, and `revert`. Use a `!` only for a breaking change and
 include a matching `BREAKING CHANGE:` footer.
+
+Use only the types listed above; the hook rejects unlisted types. Read the full
+hook output when a commit fails, not just its final message.
+
+## Docs publishing
+
+Treat `docs/**` as the source of truth for website documentation. Control which
+pages are published through `website/scripts/docs-sources.json`. Do not publish
+internal files such as `TODO.md`, `DESIGN_NOTES_FROM_DOCS.md`, or `IA.md`. The
+website build strips the `[Unreleased]` section from the published `CHANGELOG`.
 
 ## Pull requests
 
