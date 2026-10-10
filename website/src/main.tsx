@@ -4,6 +4,7 @@ import Router from './Router'
 import './styles.css'
 import './VisualPolish.css'
 import './HeaderExperiment.css'
+import './Typography.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
