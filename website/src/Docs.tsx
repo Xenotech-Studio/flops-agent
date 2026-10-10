@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import data from './content/docs/_meta.json'
 import './Docs.css'
+import { DOCS_SEARCH_EVENT } from './PublicHeader'
 const pages = data.pages
 const groups = [...new Set(pages.map(p => p.group))]
 
@@ -36,6 +37,8 @@ export default function Docs({ path }: { path: string }) {
   useEffect(() => {
     document.title = `${page?.title ?? '文档未找到'} · flops-agent`
     const key = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearch(s => !s) } }
+    const openSearch = () => setSearch(true)
+    window.addEventListener(DOCS_SEARCH_EVENT, openSearch)
     window.addEventListener('keydown', key)
     if (location.hash) { try { document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView() } catch { /* Malformed URL fragment. */ } }
     const update = () => {
@@ -45,7 +48,7 @@ export default function Docs({ path }: { path: string }) {
       setActive(current)
     }
     update(); window.addEventListener('scroll', update, { passive: true })
-    return () => { window.removeEventListener('keydown', key); window.removeEventListener('scroll', update) }
+    return () => { window.removeEventListener(DOCS_SEARCH_EVENT, openSearch); window.removeEventListener('keydown', key); window.removeEventListener('scroll', update) }
   }, [page])
   async function copyMarkdown() {
     try { await navigator.clipboard.writeText(page!.publicMarkdown); setCopy('已复制') }
@@ -53,8 +56,6 @@ export default function Docs({ path }: { path: string }) {
   }
   const index = page ? pages.indexOf(page) : -1
   return <div className="docs-page">
-    <a className="skip-link" href="#docs-content">跳到正文</a>
-    <header className="site-header docs-header"><div className="site-header-inner"><a className="brand" href="/"><img className="brand-mark" src="/favicon-64.png?v=9339b14ffac0" width="31" height="31" alt="" />flops-agent</a><nav className="header-nav" aria-label="主导航"><a href="/#quick-start">快速开始</a><a href="/docs" aria-current="page">文档</a></nav><button className="docs-search-button" onClick={() => setSearch(true)}>搜索文档 <kbd>⌘ K / Ctrl K</kbd></button></div></header>
     <div className="docs-layout">
       <aside className="docs-sidebar"><button className="docs-menu-toggle" aria-expanded={menu} aria-controls="docs-navigation" onClick={() => setMenu(!menu)}>文档目录 <span>{menu ? '−' : '+'}</span></button><nav id="docs-navigation" className={menu ? 'open' : ''} aria-label="文档目录">{groups.map(group => <div className="docs-group" key={group}><p>{group}</p>{pages.filter(p => p.group === group).map(p => <a key={p.slug} href={p.href} aria-current={p === page ? 'page' : undefined}>{p.title}</a>)}</div>)}</nav><a className="docs-repo" href="https://github.com/Xenotech-Studio/flops-agent">GitHub ↗</a></aside>
       <main id="docs-content" tabIndex={-1} className="docs-main">{page ? <>

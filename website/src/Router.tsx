@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import App from './App'
 import Docs from './Docs'
+import PublicHeader from './PublicHeader'
 
 export default function Router() {
   const [path, setPath] = useState(location.pathname)
@@ -28,5 +29,8 @@ export default function Router() {
   useEffect(() => {
     if (path === '/') document.title = 'flops-agent — 开箱即用的云端 agent 框架'
   }, [path])
-  return path === '/' ? <App /> : <Docs key={path} path={path} />
+  return <>
+    <PublicHeader docs={path !== '/'} />
+    {path === '/' ? <App /> : <Docs key={path} path={path} />}
+  </>
 }
