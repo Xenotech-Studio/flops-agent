@@ -1,39 +1,70 @@
-# 5. Cancellation, Suspension, and Continuing a Turn
+# Stop work and accept user input
 
-A service agent has more control flow than “completed” or “failed.” A user can stop it, a tool can require confirmation, and new input can arrive while work is running. The framework models each case instead of asking the HTTP handler to build a second run loop.
+**Reader question:** What should happen when a user stops work, answers a confirmation card, or adds another message?
 
-## Cancellation stops a Run; it does not close SSE
+**Prerequisites:** Understand [the separation between execution and subscription](03-streaming-and-sse.md). **Outcome:** Choose the correct entry point for each intent instead of cancelling and restarting everything.
 
-Closing a browser only ends a subscription. By default it does not cancel work. Cancel through a run or runtime:
+## Choose the action first
 
-    # When you already hold the run handle.
-    await run.stop()
+| User intent | Action | Result |
+|---|---|---|
+| Stop the current task | Request a stop | Runner ends at a check boundary with status stopped |
+| Decide something a tool needs | Suspend, then submit an answer | The old Run is suspended; a later request advances the conversation |
+| Add information during a task | Enqueue it in Inbox | Read at a defined loop boundary without preempting the current tool |
 
-    # Cancel by session. The local pool is preferred; with a RunStore this also
-    # records shared stop intent.
-    stopped_run_id = await runtime.stop_session("conv-42", owner_id="u-7")
+## Try it: stop a run
 
-The runner checks for a stop request at chunk and tool boundaries, emits Cancelled, then reaches RunStatus.STOPPED. A remote executor must propagate the stop into its own job system. Product dispatch code can register a cancellation callback with runtime.runs.get(ctx.run_id).on_stop(...) after confirming the run is present. Do not use HTTP disconnect as the only cancellation signal.
+If you hold the handle, use `await run.stop()`. To stop by session from your product, use:
 
-## Suspend when a person must decide
+```python
+stopped_run_id = await runtime.stop_session(
+    session_id, owner_id=authenticated_owner_id,
+)
+```
 
-A tool can return InteractionRequest when it needs a user's answer. The framework persists the pending interaction, emits InteractionRequested followed by Suspended, and leaves the run ready to continue. The client sends an answer as a new query:
+Your request handler supplies runtime, session_id, and the authenticated owner id. A returned id means a stop target was found; **it does not mean a remote tool has already stopped**. If you hold a local handle, use `await run.wait()` to observe the final state. Runner handles stop requests at model-chunk and tool boundaries. A remote executor must forward the intent to its own task system.
 
-    run = runtime.start(session, Query.answer({"approved": True}))
+## Try it: answer a suspended interaction
 
-The answer becomes a tool result in history before the runner resumes. That is important: the model sees the same durable evidence after a refresh or restart.
+A tool can return InteractionRequest to ask the user a question. The framework records the pending interaction, emits interaction and suspension events, and ends this run. Your product displays the request. After the user answers, reload the same Session and start a run with the answer:
 
-Runner.after_execute() has a related but different control seam. It returns an Interaction that can continue, wait in place, or suspend after a tool result. Use InteractionRequest when a tool asks a person for a durable answer; use Interaction when runner policy controls the next step. Keep the distinction in product code rather than building a parallel pending-confirmation state machine.
+```python
+from flops_agent import Query
 
-## Accept input while a run is active
+session = await runtime.load_session(session_id, owner_id=authenticated_owner_id)
+if session.pending_interaction is None:
+    raise ValueError("This conversation has no pending interaction")
+run = runtime.start(session, Query.answer({"approved": True}))
+async for delivery in run.subscribe():
+    print(delivery.event)
+```
 
-Runtime.deliver(session_id, message, deliver="turn" | "step") places new input in the configured Inbox instead of interrupting current work.
+The tool request and product protocol define the answer shape; approved is only an example field. Validate that the answer belongs to the current pending interaction, and reject stale cards or unauthorized submissions. Interaction returned by `Runner.after_execute()` is a separate policy extension point; do not confuse it with a tool's InteractionRequest.
 
-- deliver="turn" waits for the current tool loop to finish and then continues the same run as a new user turn.
-- deliver="step" inserts at the nearest loop boundary: after the current tools finish and before the next model request.
+## Try it: queue additional input
 
-A turn boundary is also a step boundary. If the model finishes before another tool step, a waiting step message is delivered at the turn boundary rather than being stranded after the run ends.
+```python
+runtime.deliver(
+    session_id,
+    {"role": "user", "content": "Please also consider offline use."},
+    when="step",
+)
+```
 
-MemoryInbox is the zero-configuration implementation. Multi-worker or cross-process deployments should inject a shared Inbox; messages submitted with no active run remain queued until the next run reaches its first boundary.
+`when="step"` reads at the nearest loop boundary. `when="turn"` waits for the current tool loop to finish and continues as a new turn. With no active run, the message stays in Inbox until a later run reaches an input boundary. Calling deliver does not start a task by itself.
 
-Next: [Restart recovery](06-recovery.md).
+The Runtime parameter is **when**. The underlying Inbox push parameter is named deliver. The default MemoryInbox is process-local. If a custom Inbox has no push method, enqueue through its own product API.
+
+## Check the result
+
+Verify each path separately: disconnecting does not stop execution; an explicit stop eventually reaches stopped; a suspended interaction can be answered after reloading the conversation; queued input appears in a later model request. Waiting for an answer and recovering after restart are different mechanisms. Do not use recovery for an ordinary confirmation card.
+
+## Next steps
+
+Interaction state must survive requests. Continue with [saving conversations](04-sessions-and-persistence.md).
+
+## Code evidence
+
+- `src/flops_agent/engine/runtime.py:317`, `:876`: stopping and the when parameter.
+- `src/flops_agent/engine/runner.py:789`, `:844`: persisting suspension markers and applying answers.
+- `src/flops_agent/engine/execution.py:693`: stop-request semantics.

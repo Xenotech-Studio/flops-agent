@@ -7,6 +7,8 @@ import './HeaderExperiment.css'
 import './Typography.css'
 import './Theme.css'
 
+document.documentElement.lang = 'en'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Router />

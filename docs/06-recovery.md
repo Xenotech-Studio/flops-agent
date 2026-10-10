@@ -1,70 +1,56 @@
-# 6. Restart Recovery: Continue After a Process Dies
+# Recover tasks after a process restart
 
-A stop button is intentional; a reload, deployment, or crash is not. Losing a run
-during a tool call leaves users without an answer and can duplicate side effects
-when work is restarted. The framework orchestrates recovery in Runtime while the
-product supplies the facts needed to reacquire a session, keys, and its entry
-point.
+**Reader question:** How can interrupted work resume without repeating tool side effects?
 
-## Mark interruption on shutdown
+**Prerequisites:** Connect [persistent storage](04-sessions-and-persistence.md) and understand [stopping and suspension](05-cancellation-and-suspension.md). **Outcome:** Implement a recovery callback and design an interruption test with observable results.
 
-Call this from the product's SIGTERM or application shutdown hook:
+## Meet the recovery prerequisites
 
-    await runtime.shutdown()
+Recovery does not happen just because you create another Runtime. You need a persisted Session, a RunStore with recovery enumeration and retry budgets, and a product entry point that can rebuild the model, authorization context, and tool environment. InMemoryRunStore loses its evidence when the process exits and cannot provide recovery across a real restart.
 
-It marks in-flight runs as interrupted, wakes subscribers so clients can reconnect,
-and does not pretend that they completed. The process can then release background
-tasks. Interrupted state in RunStore is the clue used by the next process. Any
-product shutdown work, such as clearing temporary zero-knowledge key material,
-belongs in the same hook.
+During a normal shutdown, call `await runtime.shutdown()` from the product's shutdown hook to mark active runs as interrupted. A hard crash does not run that hook. Your storage implementation must identify abandoned active records, and your product must prevent multiple instances from recovering the same task at once.
 
-## Let Runtime orchestrate startup recovery
+## Try it: rebuild the execution entry point
 
-After wiring database, run_store, and product hooks, but before accepting traffic:
+This is an integration sketch, not a standalone script. Runtime is already connected to persistent backends. Add product authorization and context reconstruction inside resume:
 
-    async def resume(meta) -> None:
-        # meta comes from your RunStore; its shape is implementation-defined.
-        session = await runtime.load_session(meta.session_id, owner_id=meta.owner_id)
-        runtime.start(session, run_id=meta.run_id)
+```python
+async def resume(meta):
+    session = await runtime.load_session(meta.session_id, owner_id=meta.owner_id)
+    runtime.start(session, run_id=meta.run_id)
 
-    await runtime.recover(
-        resume,
-        on_gave_up=lambda meta: runtime.clear_session_active_run(
-            meta.session_id, owner_id=meta.owner_id, run_id=meta.run_id,
-        ),
+async def gave_up(meta):
+    await runtime.clear_session_active_run_async(
+        meta.session_id, owner_id=meta.owner_id, run_id=meta.run_id,
     )
 
-A real product often does not call start() directly. It re-enters its normal chat
-entry point with the original run_id, so authentication, key acquisition, and
-session lookup follow the ordinary request path. Reusing the run_id is essential:
-a client carrying that id and cursor can reconnect to its existing log.
+scheduled = await runtime.recover(resume, on_gave_up=gave_up)
+```
 
-Runtime.recover() enumerates recoverable runs, clears orphaned records, calls
-mark_resuming() so storage can enforce a retry budget, and schedules resume(meta)
-asynchronously. If repeated failures exhaust the budget, mark_resuming() returns
-0 and the framework calls on_gave_up(meta); that callback should clear product
-pointers to the abandoned run.
+Keep the original run_id so the existing log still identifies the same execution. Without new user input, no new Query is needed. Encrypted storage or specialized product entry points also require their context to be reacquired; the sketch does not do that for you.
 
-The return value is the number of recovery tasks scheduled, not the number that
-already succeeded. Track those tasks in product observability and decide when
-your deployment should accept traffic.
+`recover()` enumerates recovery candidates, calls the store's mark_resuming, and schedules resume asynchronously. It returns **the number scheduled**, not the number successfully recovered. When the budget is exhausted, it calls on_gave_up. The sample_product startup callback contains a placeholder pass; it is not a complete recovery implementation.
 
-## A tool that was running halfway through
+## Handle a partially executed tool
 
-RunStore may implement record_dispatch(), pending_dispatches(), and
-clear_dispatches(). The framework records a call before dispatch. When recovery
-finds an unfinished record and matching history, the first step re-dispatches it
-rather than asking the model a second time. A remote executor should record its
-own task id through ToolContext.record_dispatch(), then reuse or wait for that
-task when ctx.resume_of is present.
+A remote tool may finish its operation before the result reaches Session. Rerunning the model could submit an order or perform a write twice.
 
-Recovery is not an InMemoryRunStore feature: memory is gone when the process exits.
-A production store needs cross-process logs, state, latest-run lookup, and, when
-needed, shared stop intent.
+RunStore dispatch records and ToolContext's record_dispatch and resume_of provide correlation evidence. The executor should retain the remote task identifier and query or reuse the first task during recovery instead of blindly creating another. A dispatch record is not an exactly-once business guarantee. Idempotency keys, result queries, and retry policies belong to the tool implementation.
 
-Finally, classify side effects. Retrying a read-only lookup and creating an order
-or executing a command are not equivalent. Dispatch records let the executor
-receive ctx.resume_of, but business idempotence exists only if the executor records
-the first remote task and reuses or queries it on recovery.
+## Check the result
 
-Next: [Extending the framework](07-extending.md).
+1. Start a run with a test tool whose task id can be queried. Save run_id and the last cursor.
+2. Interrupt the process after the executor accepts the task. Confirm that Session and run evidence remain in storage.
+3. Start a new Runtime and call recover. Observe the callback, final state, and errors, not just scheduled.
+4. Query the tool system and confirm the business operation happened once. Reconnect to the original run_id and verify your product replay path.
+5. Simulate recovery failure and check that retrying ends and product pointers are cleaned up when the budget is exhausted.
+
+## Next steps
+
+Once recovery works, consider [long-conversation input](context-window.md). For exact storage capabilities, see the [API contract](api_surface.md).
+
+## Code evidence
+
+- `src/flops_agent/engine/runtime.py:1154`, `:1258`: recovery scheduling and shutdown semantics.
+- `src/flops_agent/engine/runner.py:666`: recovery planning for unfinished dispatches.
+- `src/flops_agent/tools/registry.py:49`, `:83`: execution context and dispatch records.

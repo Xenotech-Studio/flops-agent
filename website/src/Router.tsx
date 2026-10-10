@@ -74,7 +74,7 @@ export default function Router() {
     }
   }, [])
   useEffect(() => {
-    if (path === '/') document.title = 'flops-agent — 开箱即用的云端 agent 框架'
+    if (path === '/') document.title = 'flops-agent — A ready-to-integrate framework for server-side agents'
   }, [path])
   return <>
     <PublicHeader docs={headerPath !== '/'} />

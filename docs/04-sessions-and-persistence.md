@@ -1,58 +1,61 @@
-# 4. Sessions and Persistence: Treat History as Evolving Data
+# Save a conversation and continue it
 
-A short script can retain messages in memory. A service cannot: history must load on the next request, reconnect logs must be visible across workers, and regeneration must not overwrite thousands of records. The framework therefore persists conversations and runs separately.
+**Reader question:** How does the next request pick up history, and why is there a separate run log?
 
-## Database stores a Session
+**Prerequisites:** Complete [the two-turn example](02-core-concepts.md). **Outcome:** Distinguish the two stores, continue the same conversation, and recognize when you need a persistent backend.
 
-Database stores session metadata and messages. It is not a broad load()/save() object. It offers fine-grained primitives for metadata reads, ranged message reads, counts, append, truncate, indexed replacement, metadata patches, and creation.
+## Decide what you are storing
 
-    runtime = Runtime(llm=my_llm, database=my_database)
+| Data | Storage boundary | Purpose |
+|---|---|---|
+| Conversation metadata and message history | Database | Let the next model turn see the conversation so far |
+| One run's state and output log | RunStore | Subscription replay, stop intent, and recovery evidence |
+| Long-term knowledge extracted from conversations | Memory | Product-defined recall and maintenance |
 
-    session = await runtime.load_session("conv-42", owner_id="u-7", keys=request_keys)
-    run = runtime.start(session, Query.text("Continue."), keys=request_keys)
-    async for _ in run.subscribe():
-        pass
+Saving a Session does not mean a browser can replay every streaming frame from a Run. Saving a run log does not mean you have the full conversation history needed for the next model request.
 
-The default runner persists history at appropriate boundaries; normally you do not save it yourself. If product code edits a Session outside the framework, call await runtime.save_session(session, keys=...). Use load_session_sync() and save_session_sync() only in synchronous scripts.
+## Try it: continue the same conversation
 
-Why so many operations? Appending new messages must not rewrite old history; regeneration truncates; continuation replaces a tail message; changing a title should not read or encrypt an entire conversation. sync_session() selects a safe append, truncate, or last-message rewrite from a length change. For a special edit in the middle, call Database.replace_message() at that index rather than hoping one whole-session save will identify it.
+The [basic example](02-core-concepts.md) uses InMemoryDatabase and already demonstrates reloading the same id in one process. Keep that flow when integrating your product:
 
-keys is a pass-through slot. A zero-knowledge product can provide its own key shape per request; the framework neither interprets, caches, nor persists it.
+```python
+from flops_agent import Runtime, Query
 
-InMemoryDatabase is a semantically complete reference implementation for examples and tests. It disappears with the process and is not production storage.
+runtime = Runtime(llm=client, database=database, run_store=run_store)
+# Your product assembles client, database, and run_store at startup.
+session = await runtime.load_session(session_id, owner_id=authenticated_owner_id)
+run = runtime.start(session, Query.text("Continue the previous question."))
+async for delivery in run.subscribe():
+    consume(delivery)  # Your response or rendering logic
+```
 
-To implement Database, provide synchronous versions of load_meta, load_messages, count_messages, append_messages, truncate_messages, replace_message, patch_meta, and create_session. They address a session by session_id and optional owner_id; encrypted reads and writes also receive untouched keys. Runtime moves every framework async-path database operation — including lifecycle marker patches — off the event loop and serializes work for one session. Implementations must be safe to call from worker threads. Use load_session_sync() and save_session_sync() only in synchronous scripts.
+The default Runner persists history at execution boundaries; normal requests do not need another whole-Session save. Call `await runtime.save_session(session)` when product code edits a conversation outside the framework. For an edit in the middle of history, use the precise replacement interface rather than expecting a whole-session save to discover arbitrary changes.
 
-## RunStore stores a Run
+## Replace memory with persistent storage
 
-Database answers “what did this conversation say?” RunStore answers “where did this turn get to, and which output should a browser replay?” With Runtime(run_store=my_store), the framework records run metadata on creation, persists each completed log segment, and stores terminal status.
+InMemoryDatabase and InMemoryRunStore are reference implementations whose data disappears on process exit. To retain data across restarts, implement and inject your own backends.
 
-    runtime = Runtime(llm=my_llm, database=my_database, run_store=my_run_store)
+Database requires granular operations for metadata reads, ranged message reads, counts, append, truncation, replacement, metadata patches, and session creation. RunStore manages creation, log append, ranged replay, and terminal state. Cross-process stops and recovery require additional capabilities. Consult the [API contract](api_surface.md) for the methods.
 
-Cross-process reconnection, stop intent, and restart recovery rely on optional RunStore capabilities. InMemoryRunStore is suitable for single-process demos and protocol tests. A production store is normally shared and keeps append_chunks(), buffer_range(), and status updates consistent for the same run id.
+Both protocols use synchronous methods. Asynchronous framework paths offload storage calls to worker threads, so backends must support those calls. The framework's per-session lock is not a cross-process database transaction; the backend must still provide appropriate concurrency and consistency. owner_id is a data-addressing parameter, not a substitute for authentication.
 
-RunStore remains a synchronous protocol, but Runtime and Run offload service-path
-calls to worker threads. A Run initializes its store before Runner work begins;
-subscribers wait for that preloading step, so recovery replay is complete and
-the event loop is never blocked by storage I/O.
+## Editing and long conversations
 
-`create_run(run_id, ...)` is create-if-absent. Repeating it for an existing id
-must succeed without changing its metadata, buffered output, stop intent, or
-resume evidence — even if the stored run is terminal. A run id is therefore a
-persistent replay identity and must never be recycled for a different turn.
+Session supports truncation by message id and rewinding by user turn. When an edit could discard later user input, it requires explicit `consent=True` or may raise TruncationNeedsConsent. Confirm the user's intent first, then edit and persist history, and use `runtime.start(session)` to continue when appropriate.
 
-Capability support is deliberately incremental. Logs and terminal status are enough for a current process. Latest-run lookup and stop intent enable cross-worker stop requests. Active-run enumeration, resume counts, and dispatch records add restart recovery and duplicate-dispatch avoidance. Review the next two articles against the capabilities your deployment implements.
+Editing history changes the factual record. Temporarily shortening model input is a different operation; see [controlling input in long conversations](context-window.md).
 
-## Edit a Session safely
+## Check the result
 
-Session offers truncate_after(), truncate_before(), and rewind_to_user_turn() by message id. If an edit could discard another user's turn, these require consent=True or raise TruncationNeedsConsent. This guard prevents silently deleting history before the product has confirmed intent in its UI.
+Send two turns with the same owner_id and session_id, reload, and inspect the messages. Switch owner_id and verify that your backend isolates data as intended. Once you have real persistent storage, restart the process and check that history remains. An in-memory backend should not pass that last test.
 
-A normal regeneration flow is: identify and truncate at the product boundary, persist that edit, then call runtime.start(session) with no query. Do not invent a regenerate=True parameter that duplicates session state.
+## Next steps
 
-## Projection and compaction are different
+After storage works, test [restart recovery](06-recovery.md). Do not assume every tool can resume automatically.
 
-Persisted Session.messages should retain facts. Messages sent to a model may be a temporary view. The default Runner.project_messages() returns history unchanged; a product can override it to trim old tool output, images, or long text before each request. This read-time projection does not modify history or need separate storage.
+## Code evidence
 
-Context compaction calls a model to produce a summary, then persists it as a CompactionRecord in CompactionStore. The framework provides ProjectionConfig, CompactionPolicy, planning, and quality checks in flops_agent.engine.compaction; Runtime does not automatically wire them. Window discovery, summary-model routing, write permissions, and summary storage remain product policy. Article 7 shows where that integration belongs.
-
-Next: [Cancellation and suspension](05-cancellation-and-suspension.md).
+- `src/flops_agent/seams/database.py:23`: the granular Database protocol.
+- `src/flops_agent/engine/runtime.py:961`, `:1009`: asynchronous loading and saving.
+- `src/flops_agent/seams/run_store.py:25`: run-log storage protocol.
+- `src/flops_agent/entities/session.py:138`: consent checks for history truncation.
