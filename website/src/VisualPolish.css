@@ -7,7 +7,7 @@
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fafafa;
+  background: var(--chip-bg);
 
 }
 .home-layout .metadata li + li::before { content: none; }
@@ -31,42 +31,42 @@
 .home-layout :is(.product-card, .docs-index):hover { border-color: var(--color-border-strong); }
 
 /* C. Document navigation: separate selected state from hover. */
-.docs-group > p, .docs-outline p { color: #626262; }
+.docs-group > p, .docs-outline p { color: var(--text-secondary); }
 .docs-group a { margin-left: 0; border-radius: 0 6px 6px 0; }
-.docs-group a:hover { background: #f7f7f7; border-left-color: #b3b3b3; }
+.docs-group a:hover { background: var(--hover-bg); border-left-color: var(--scroll-thumb); }
 .docs-group a[aria-current="page"] {
-  background: #eeeeee;
+  background: var(--selected-bg);
   border-left-color: var(--ink);
   color: var(--ink);
 
 }
 .docs-outline a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.docs-breadcrumb { color: #626262; }
+.docs-breadcrumb { color: var(--text-secondary); }
 
 /* D. Reading details: keep the document columns and mobile measure intact. */
 
 .docs-prose h2 { margin-top: 40px; padding-top: 16px; }
 .docs-prose h3 { margin-top: 32px; }
-.docs-prose a { text-decoration-color: #a3a3a3; text-decoration-thickness: 1px; }
+.docs-prose a { text-decoration-color: var(--link-underline); text-decoration-thickness: 1px; }
 .docs-prose a:hover { text-decoration-color: var(--ink); }
-.docs-prose :not(pre) > code { background: #f4f4f4; border: 1px solid #e5e5e5; padding: 1px 4px; border-radius: 4px; }
-.docs-prose pre { border-color: #dedede; }
-.docs-prose blockquote { border-left-color: #d4d4d4; }
+.docs-prose :not(pre) > code { background: var(--inline-bg); border: 1px solid var(--line); padding: 1px 4px; border-radius: 4px; }
+.docs-prose pre { border-color: var(--code-border); }
+.docs-prose blockquote { border-left-color: var(--color-border-strong); }
 .docs-table { border: 1px solid var(--line); }
 .docs-table th, .docs-table td { border-inline: 0; }
 .docs-table th + th, .docs-table td + td { border-left: 1px solid var(--line); }
 .docs-prose pre, .docs-table, .home-layout .table-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #b3b3b3 #f5f5f5;
+  scrollbar-color: var(--scroll-thumb) var(--color-bg-muted);
 }
-.home-layout .code-window pre { scrollbar-width: thin; scrollbar-color: #737373 #1c1c1c; }
+.home-layout .code-window pre { scrollbar-width: thin; scrollbar-color: var(--text-subtle) #1c1c1c; }
 .docs-prose pre:focus-visible, .docs-table:focus-visible,
 .home-layout .table-scroll:focus-visible { outline-offset: -3px; }
 
 /* E. Page endings: quiet, bounded navigation and a consistent spacing rhythm. */
 .docs-pagination { gap: 16px; padding-top: 24px; margin-top: 48px; }
 .docs-pagination a { padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
-.docs-pagination a:hover { background: #f7f7f7; }
+.docs-pagination a:hover { background: var(--hover-bg); }
 .docs-footer { padding-top: 24px; margin-top: 32px; }
 .site-footer { padding-block: 32px; }
 

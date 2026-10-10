@@ -1,3 +1,4 @@
+import ThemeToggle from './ThemeToggle'
 // The header stays mounted across page changes so CSS can interpolate its width.
 // This UI event opens the existing Docs search without coupling it to routing.
 export const DOCS_SEARCH_EVENT = 'flops-docs-search'
@@ -15,12 +16,15 @@ export default function PublicHeader({ docs }: { docs: boolean }) {
           <a href={docs ? '/' : '#quick-start'}>{docs ? '首页' : '快速开始'}</a>
           <a href="/docs" aria-current={docs ? 'page' : undefined}>文档</a>
         </nav>
+        <div className="header-actions">
         {docs ? <button className="docs-search-button" onClick={() => window.dispatchEvent(new Event(DOCS_SEARCH_EVENT))}>搜索文档 <kbd>⌘ K / Ctrl K</kbd></button> :
           <div className="public-links" aria-label="项目链接">
             <a href="https://github.com/Xenotech-Studio/flops-agent" title="GitHub 公开仓库 · MIT">GitHub <span className="external-mark" aria-hidden="true">↗</span></a>
             <a href="https://pypi.org/project/flops-agent/" title="PyPI · flops-agent 0.2.0">PyPI <span className="external-mark" aria-hidden="true">↗</span></a>
             <span className="link-status">MIT · 0.2.0</span>
           </div>}
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   </>
