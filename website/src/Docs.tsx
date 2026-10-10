@@ -3,7 +3,7 @@ import data from './content/docs/_meta.json'
 import './Docs.css'
 import { DOCS_SEARCH_EVENT } from './PublicHeader'
 const pages = data.pages
-const groups = [...new Set(pages.map(p => p.group))]
+const sections = data.sections
 
 function Search({ close }: { close: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -54,15 +54,19 @@ export default function Docs({ path }: { path: string }) {
     try { await navigator.clipboard.writeText(page!.publicMarkdown); setCopy('已复制') }
     catch { setCopy('复制失败，请打开 Markdown 原文') }
   }
-  const index = page ? pages.indexOf(page) : -1
+  const section = sections.find(section => section.id === page?.section)
+  const sectionPages = section?.navigation === false || !page ? pages : pages.filter(p => p.section === page.section)
+  const groups = [...new Set(sectionPages.map(p => p.group))]
+  const index = page ? sectionPages.indexOf(page) : -1
   return <div className="docs-page">
+    <div className="docs-area-bar"><nav className="docs-area-inner" aria-label="文档区域">{sections.filter(section => section.navigation !== false).map(section => <a key={section.id} href={section.href} aria-current={section.id === page?.section ? 'page' : undefined}>{section.title}</a>)}</nav></div>
     <div className="docs-layout">
-      <aside className="docs-sidebar"><button className="docs-menu-toggle" aria-expanded={menu} aria-controls="docs-navigation" onClick={() => setMenu(!menu)}>文档目录 <span>{menu ? '−' : '+'}</span></button><nav id="docs-navigation" className={menu ? 'open' : ''} aria-label="文档目录">{groups.map(group => <div className="docs-group" key={group}><p>{group}</p>{pages.filter(p => p.group === group).map(p => <a key={p.slug} href={p.href} aria-current={p === page ? 'page' : undefined}>{p.title}</a>)}</div>)}</nav><a className="docs-repo" href="https://github.com/Xenotech-Studio/flops-agent">GitHub ↗</a></aside>
+      <aside className="docs-sidebar"><button className="docs-menu-toggle" aria-expanded={menu} aria-controls="docs-navigation" onClick={() => setMenu(!menu)}>文档目录 <span>{menu ? '−' : '+'}</span></button><nav id="docs-navigation" className={menu ? 'open' : ''} aria-label="文档目录">{groups.map(group => <div className="docs-group" key={group}><p>{group}</p>{sectionPages.filter(p => p.group === group).map(p => <a key={p.slug} href={p.href} aria-current={p === page ? 'page' : undefined}>{p.title}</a>)}</div>)}</nav><a className="docs-repo" href="https://github.com/Xenotech-Studio/flops-agent">GitHub ↗</a></aside>
       <main id="docs-content" tabIndex={-1} className="docs-main">{page ? <>
         <div className="docs-breadcrumb"><a href="/docs">文档</a><span>/</span><span>{page.group}</span></div>
         <div className="docs-tools"><button onClick={copyMarkdown}><span aria-live="polite">{copy}</span></button><a href={`/docs-source/${page.slug}.md`}>Markdown 原文 ↗</a></div>
         <article className="docs-prose" lang={page.overview ? 'zh-CN' : 'en'} dangerouslySetInnerHTML={{ __html: page.html }} />
-        <nav className="docs-pagination" aria-label="前后篇">{index > 0 ? <a href={pages[index - 1].href}><small>← 上一篇</small>{pages[index - 1].title}</a> : <span />}{index < pages.length - 1 && <a href={pages[index + 1].href}><small>下一篇 →</small>{pages[index + 1].title}</a>}</nav>
+        <nav className="docs-pagination" aria-label="前后篇">{index > 0 ? <a href={sectionPages[index - 1].href}><small>← 上一篇</small>{sectionPages[index - 1].title}</a> : <span />}{index < sectionPages.length - 1 && <a href={sectionPages[index + 1].href}><small>下一篇 →</small>{sectionPages[index + 1].title}</a>}</nav>
         <footer className="docs-footer">flops-agent · MIT <a href="/docs-index.json">文档索引 JSON ↗</a></footer>
       </> : <div className="docs-not-found"><p>404 / DOCUMENTATION</p><h1>文档未找到</h1><p>该地址不在公开文档清单中。</p><a href="/docs">返回文档概览 →</a></div>}</main>
       {page && <aside className="docs-outline"><nav aria-label="本页目录"><p>本页目录</p>{page.headings.map(h => <a key={h.id} href={`#${h.id}`} data-level={h.level} aria-current={active === h.id ? 'location' : undefined}>{h.text}</a>)}</nav></aside>}

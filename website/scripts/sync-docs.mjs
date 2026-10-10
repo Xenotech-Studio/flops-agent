@@ -8,6 +8,24 @@ const override = process.env.FLOPS_AGENT_DOCS_DIR;
 if (override !== undefined && !isAbsolute(override)) throw new Error('FLOPS_AGENT_DOCS_DIR 必须是绝对路径');
 const sourceDir = override ?? fileURLToPath(new URL('../../docs/', import.meta.url));
 const sources = JSON.parse(await readFile(new URL('./docs-sources.json', import.meta.url), 'utf8'));
+const definitions = JSON.parse(await readFile(new URL('./docs-sections.json', import.meta.url), 'utf8'));
+if (!Array.isArray(definitions)) throw new Error('区域配置必须是数组');
+const sectionMap = new Map();
+for (const section of definitions) {
+  if (!section || !/^[a-z][a-z0-9-]*$/.test(section.id) || sectionMap.has(section.id) || typeof section.title !== 'string' || !section.title.trim() || !Number.isSafeInteger(section.order) || !['use', 'contract'].includes(section.kind) || (section.navigation !== undefined && typeof section.navigation !== 'boolean')) throw new Error('无效或重复的区域配置');
+  sectionMap.set(section.id, section);
+}
+for (const entry of sources) {
+  if (!sectionMap.has(entry.section)) throw new Error(`${entry.slug}: 未知 section ${entry.section}`);
+  if (entry.overview !== undefined && typeof entry.overview !== 'boolean') throw new Error(`${entry.slug}: overview 必须为布尔值`);
+}
+const sections = definitions.map(section => {
+  const entries = sources.filter(entry => entry.section === section.id);
+  const overviews = entries.filter(entry => entry.overview);
+  if (!entries.length || overviews.length > 1) throw new Error(`${section.id}: 区域不能为空，且最多只能有一个 overview`);
+  const landing = overviews[0] ?? entries[0];
+  return { ...section, href: landing.slug === 'overview' ? '/docs' : `/docs/${landing.slug}` };
+}).sort((a, b) => a.order - b.order);
 const github = 'https://github.com/Xenotech-Studio/flops-agent/';
 const forbidden = /(?:^|\/)(?:TODO|DESIGN_NOTES_FROM_DOCS)\.md(?:$|[#?])/i;
 const routes = new Map(sources.map(s => [s.file, s.slug === 'overview' ? '/docs' : `/docs/${s.slug}`]));
@@ -40,9 +58,10 @@ const pages = await Promise.all(sources.map(async (entry, order) => {
   const href = routes.get(entry.file);
   const source = entry.slug === 'overview' ? 'website/scripts/docs-overview.md (based on docs/README.md)' : `docs/${entry.file}`;
   const { html, headings, summary } = renderMarkdown(markdown);
-  const header = { canonical: href, section: 'framework', title, group: entry.group, status: '本次构建读取的本地 clone 内容', source, overview: entry.slug === 'overview' };
+  const section = sections.find(section => section.id === entry.section);
+  const header = { canonical: href, section: section.id, title, group: entry.group, status: '本次构建读取的本地 clone 内容', source, overview: entry.overview === true };
   const publicMarkdown = '---\n' + Object.entries(header).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join('\n') + '\n---\n\n' + markdown;
-  return { slug: entry.slug, title, group: entry.group, order, href, source, markdown, publicMarkdown, html, headings, summary, overview: header.overview };
+  return { slug: entry.slug, section: section.id, section_title: section.title, section_url: section.href, section_order: section.order, kind: section.kind, title, group: entry.group, order, href, source, markdown, publicMarkdown, html, headings, summary, overview: header.overview };
 }));
 if (new Set(pages.map(p => p.slug)).size !== pages.length) throw new Error('重复 slug');
 for (const dir of ['src/content/docs', 'public/docs-source']) {
@@ -53,6 +72,6 @@ for (const page of pages) {
   await writeFile(join(website, 'src/content/docs', page.slug + '.md'), page.markdown);
   await writeFile(join(website, 'public/docs-source', page.slug + '.md'), page.publicMarkdown);
 }
-await writeFile(join(website, 'src/content/docs/_meta.json'), JSON.stringify({ pages }, null, 2) + '\n');
-await writeFile(join(website, 'public/docs-index.json'), JSON.stringify(pages.map(p => ({ slug: p.slug, title: p.title, summary: p.summary, section: 'framework', section_title: '框架文档', section_url: '/docs', section_order: 0, kind: 'use', status: '本次构建读取的本地 clone 内容', canonical_url: p.href, markdown_url: `/docs-source/${p.slug}.md`, source: p.source, group: p.group, overview: p.overview, headings: p.headings })), null, 2) + '\n');
+await writeFile(join(website, 'src/content/docs/_meta.json'), JSON.stringify({ sections, pages }, null, 2) + '\n');
+await writeFile(join(website, 'public/docs-index.json'), JSON.stringify(pages.map(p => ({ slug: p.slug, title: p.title, summary: p.summary, section: p.section, section_title: p.section_title, section_url: p.section_url, section_order: p.section_order, kind: p.kind, status: '本次构建读取的本地 clone 内容', canonical_url: p.href, markdown_url: `/docs-source/${p.slug}.md`, source: p.source, group: p.group, overview: p.overview, headings: p.headings })), null, 2) + '\n');
 console.log(`已从本地文档目录同步 ${pages.length} 篇；仅包含显式发布清单。`);
