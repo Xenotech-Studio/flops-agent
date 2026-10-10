@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const installExample = `# Python ≥ 3.10，建议在虚拟环境中执行
+const installExample = `# Python ≥ 3.10; use a virtual environment
 pip install flops-agent`
 
 const repositoryExample = `git clone https://github.com/Xenotech-Studio/flops-agent.git
@@ -18,26 +18,26 @@ from flops_agent import (
 
 
 class DemoLLM:
-    # 演示用假 LLM：只返回固定文本，不调用模型或网络。
+    # Demo model: fixed text only, with no model or network calls.
     async def acompletion(
         self, **kwargs: object
     ) -> AsyncIterator[StreamChunk]:
         async def stream() -> AsyncIterator[StreamChunk]:
-            for text in ("你好，", "这是一轮独立的后台执行。"):
+            for text in ("Hello, ", "this is an independent background run."):
                 await asyncio.sleep(0)
                 yield TextStreamChunk(text=text)
         return stream()
 
 
-# 在应用启动时装配一次；这里的数据库仅在内存中保存。
+# Assemble once at startup; this database stores data only in memory.
 runtime = Runtime(llm=DemoLLM(), database=InMemoryDatabase())
 
 
 async def main() -> None:
     session: Session = await runtime.load_session("demo-session")
-    run: Run = runtime.start(session, Query.text("演示一次执行。"))
+    run: Run = runtime.start(session, Query.text("Demonstrate one run."))
 
-    # start() 已启动工作；subscribe() 只观察事件。
+    # start() has started work; subscribe() only observes events.
     async for delivery in run.subscribe():
         if isinstance(delivery.event, TextDelta):
             print(delivery.event.text, end="", flush=True)
@@ -71,10 +71,10 @@ function CopyButton({ text }: { text: string }) {
           <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" />
           <path d="M10.5 3.5v-1h-8v8h1" stroke="currentColor" strokeLinejoin="round" />
         </svg>
-        复制代码
+        Copy code
       </button>
       <span className={`copy-feedback${status === 'failed' ? ' copy-error' : ''}`} role="status">
-        {status === 'copied' ? '已复制' : status === 'failed' ? '复制失败，请手动选择文本' : ''}
+        {status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed; select the text manually' : ''}
       </span>
     </span>
   )
@@ -87,7 +87,7 @@ function CodeBlock({ title, language, code }: { title: string; language: string;
         <span><span className="code-language">{language}</span>{title}</span>
         <CopyButton text={code} />
       </figcaption>
-      <pre tabIndex={0} aria-label={`${title} 代码`}><code>{code}</code></pre>
+      <pre tabIndex={0} aria-label={`${title} code`}><code>{code}</code></pre>
     </figure>
   )
 }
@@ -107,255 +107,255 @@ function App() {
       <div className="home-layout">
       <main id="content" className="page-column">
         <section className="hero" aria-labelledby="hero-title">
-          <p className="eyebrow hero-eyebrow"><span className="status-dot" aria-hidden="true" />独立的 Python 框架<span className="eyebrow-separator">/</span>flops_agent</p>
-          <h1 id="hero-title">开箱即用的云端 agent 框架</h1>
-          <p className="hero-copy" id="hero-copy">它跑在你自己的服务端上：把 agent 跑成服务该有的那套运行机制（执行与订阅、取消与恢复、多端续接、远端工具）都是现成的——模型、存储、执行器由你接。</p>
-          <ul className="metadata" aria-label="项目元信息">
-            <li>MIT 开源</li><li>PyPI 0.2.0</li><li>Development Status: <strong>Beta</strong></li><li>Python ≥ 3.10</li>
+          <p className="eyebrow hero-eyebrow"><span className="status-dot" aria-hidden="true" />A standalone Python framework<span className="eyebrow-separator">/</span>flops_agent</p>
+          <h1 id="hero-title">A ready-to-integrate framework for server-side agents</h1>
+          <p className="hero-copy" id="hero-copy">Run it on your own server. Execution and subscriptions, cancellation and recovery, reconnecting clients, and remote tools have defined runtime mechanisms; you connect the model, storage, and executor.</p>
+          <ul className="metadata" aria-label="Project metadata">
+            <li>MIT open source</li><li>PyPI 0.2.0</li><li>Development Status: <strong>Beta</strong></li><li>Python ≥ 3.10</li>
           </ul>
           <div className="hero-actions">
-            <a className="button button-primary" href="#quick-start">看 5 分钟例子 <span aria-hidden="true">↓</span></a>
-            <a className="button button-secondary" href="#non-goals">它不做什么 <span aria-hidden="true">↗</span></a>
+            <a className="button button-primary" href="#quick-start">Try the five-minute example <span aria-hidden="true">↓</span></a>
+            <a className="button button-secondary" href="#non-goals">What it does not do <span aria-hidden="true">↗</span></a>
           </div>
           <div className="hero-principle">
-            <p className="hero-story">为持续运行的 AI 服务，提供清晰的执行生命周期。</p>
-            <span>任务持续执行</span><span className="principle-divider" aria-hidden="true" /><span>客户端按需查看</span>
-            <p>刷新或断开订阅，不会终止已经启动的任务；跨设备续接由产品层接入身份、存储与路由。</p>
+            <p className="hero-story">A clear execution lifecycle for AI services that keep running.</p>
+            <span>Tasks keep running</span><span className="principle-divider" aria-hidden="true" /><span>Clients subscribe as needed</span>
+            <p>Refreshing or ending a subscription does not stop an existing task. Your product supplies identity, storage, and routing for reconnection across devices.</p>
           </div>
         </section>
 
         <a className="product-card" href="https://flops.xenotech.studio/intro">
-          <strong className="product-card-title">flops-agent 是一个开源内核。</strong>
-          <span>如果你需要一个开箱即用的产品，看这里 → <strong>Flops</strong></span>
+          <strong className="product-card-title">flops-agent is an open-source kernel.</strong>
+          <span>For a ready-to-use product, see → <strong>Flops</strong></span>
         </a>
 
-        <nav className="section-nav" aria-label="页面目录">
-          <a href="#boundaries">它是什么</a><a href="#pitfalls">四个坑</a><a href="#why">省掉哪些工作</a><a href="#value">它凭什么</a><a href="#showcase">参考实现</a><a href="#progress">当前进展</a>
+        <nav className="section-nav" aria-label="On this page">
+          <a href="#boundaries">Scope</a><a href="#pitfalls">Four challenges</a><a href="#why">Less to build</a><a href="#value">Why this framework</a><a href="#showcase">Showcase</a><a href="#progress">Project status</a>
         </nav>
 
         <section className="section" id="boundaries">
-          <SectionHeading number="01" label="边界 / SCOPE" title="它是什么 / 不是什么" />
-          <p className="section-intro">flops-agent 是供你嵌入自己应用的 Python 框架。它组织一轮任务从开始到结束的过程；账号、界面、模型和业务决策由你的产品层提供。</p>
-          <div className="table-scroll" tabIndex={0} role="region" aria-label="框架与产品层职责对照表，可横向滚动">
+          <SectionHeading number="01" label="SCOPE" title="What it is, and what it is not" />
+          <p className="section-intro">flops-agent is a Python framework you embed in your application. It organizes a task from start to finish; your product supplies accounts, UI, models, and business decisions.</p>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Framework and product responsibilities; scroll horizontally">
             <table className="boundary-table">
-              <caption className="sr-only">框架提供的机制与产品层需要完成的工作</caption>
-              <thead><tr><th scope="col">框架给什么</th><th scope="col">产品层填什么</th></tr></thead>
+              <caption className="sr-only">Mechanisms provided by the framework and work owned by the product</caption>
+              <thead><tr><th scope="col">The framework provides</th><th scope="col">Your product supplies</th></tr></thead>
               <tbody>
-                <tr><td><strong>任务运行与控制</strong><p>让工作在后台推进，记录输出，处理停止、等待回答和恢复。你可以复用这些执行机制。</p></td><td><strong>你的服务与业务入口</strong><p>界面、账号、访问权限和服务路由。谁能启动或查看任务，由你的产品决定。</p></td></tr>
-                <tr><td><strong>可替换的接入接口</strong><p>接上自己的模型、存储和工具执行端。你可以沿用自己的部署环境。</p></td><td><strong>实际运行的基础设施</strong><p>模型、密钥、生产存储与设备环境。你负责选择、配置和维护。</p></td></tr>
-                <tr><td><strong>事件约定与基础加解密操作</strong><p>约定怎样描述任务进展、怎样加解密指定字段。你有明确的接入位置。</p></td><td><strong>业务与安全策略</strong><p>工具文案、安全阈值、字段选择和密钥管理。你决定使用范围与访问边界。</p></td></tr>
+                <tr><td><strong>Task execution and control</strong><p>Advance work in the background, record output, and handle stopping, waiting for answers, and recovery. Reuse these execution mechanisms.</p></td><td><strong>Service and business entry points</strong><p>UI, accounts, access permissions, and service routing. Your product decides who can start or observe tasks.</p></td></tr>
+                <tr><td><strong>Replaceable integration interfaces</strong><p>Connect your own models, storage, and tool executors while keeping your deployment environment.</p></td><td><strong>The infrastructure that runs them</strong><p>Models, credentials, production storage, and device environments. You select, configure, and maintain them.</p></td></tr>
+                <tr><td><strong>Event contracts and cryptographic primitives</strong><p>Defined ways to describe task progress and encrypt or decrypt selected fields, with explicit integration points.</p></td><td><strong>Business and security policy</strong><p>Tool descriptions, safety thresholds, field selection, and key management. You define scope and access boundaries.</p></td></tr>
               </tbody>
             </table>
           </div>
         </section>
 
         <section className="section" id="pitfalls">
-          <SectionHeading number="02" label="故事 / FROM LOOP TO SERVICE" title="把 agent 做成服务，会碰到四个坑。" />
-          <p className="section-intro">本地循环跑通以后，下一步是让它接住真实的使用：人会离开，设备会掉线，数据需要保护，工具也会越来越多。</p>
+          <SectionHeading number="02" label="FROM LOOP TO SERVICE" title="Four challenges when an agent becomes a service." />
+          <p className="section-intro">Once a local loop works, it must handle real use: people leave, devices disconnect, data needs protection, and the tool catalog grows.</p>
           <div className="pitfalls-list">
             <article className="pitfall" aria-labelledby="pitfall-survival">
-              <p className="pitfall-label">01 / 存活</p>
-              <h3 id="pitfall-survival">进程会停，任务需要接续。</h3>
-              <p>第一版常常只是本地一个循环。运行状态如果都留在内存里，进程一停，未完成的工作就失去了上下文。搬到服务端后，你还得把“任务在运行”和“有人正在看”分开：用户关掉页面，已经启动的任务仍应继续。</p>
-              <p>断线重连时，客户端带上游标，从保留的事件日志回放，再接着看实时输出。服务重启则多一层要求：先持久保存会话与执行记录，再在启动时接上恢复入口，才能自动调度在途任务继续执行。恢复仍可能失败，工具副作用也需要幂等处理。</p>
-              <p className="pitfall-answer">所以框架把执行与订阅分开，并提供重连回放与恢复编排。你接入持久化存储和产品层恢复函数；默认内存存储不会跨进程保留任务。</p>
+              <p className="pitfall-label">01 / CONTINUITY</p>
+              <h3 id="pitfall-survival">Processes stop. Tasks need a way to resume.</h3>
+              <p>A first version is often just a local loop. If all execution state is in memory, unfinished work loses its context when the process stops. Moving to a server also requires separating execution from observation: closing a page should not stop a task that has already started.</p>
+              <p>On reconnection, the client supplies a cursor, replays retained log entries, and follows live output. Service restarts require more: persist conversations and execution records, then connect a startup recovery entry point to schedule interrupted work. Recovery can still fail, and tool side effects require idempotency.</p>
+              <p className="pitfall-answer">The framework separates execution from subscriptions and provides replay and recovery orchestration. You supply persistent storage and product recovery callbacks; default in-memory storage does not retain tasks across processes.</p>
             </article>
             <article className="pitfall" aria-labelledby="pitfall-hands">
-              <p className="pitfall-label">02 / 手</p>
-              <h3 id="pitfall-hands">服务端能想能说，手却在别的设备上。</h3>
-              <p>读文件、跑命令、操作浏览器，往往要碰到用户的设备。直觉是每台设备跑一个 MCP server，再加内网穿透；如果把它理解成“云端逐台连进去”，连接方向就错了。设备在 NAT 后，会休眠、会断网，需要设备主动“拨号回家”，上线后注册自己、声明能力，断线后重新接入。</p>
-              <p>接上隧道之后，还有三件事要补。连通不等于一个已注册、持续报活、带能力声明的活成员，身份、心跳与在线状态需要维护；隧道本身不负责确认任务是否投递、结果是否收到；多台设备同时在线时，还要按能力检查目标，处理“到底交给哪台”的歧义。</p>
-              <p className="pitfall-answer">所以框架留出远程执行器接缝，让产品层接入设备主动连接，再复用工具派发、结果确认与恢复等待。设备目录、授权和目标选择由产品层完成；跨进程结果恢复还需持久化投递记录。当前 Flops 的普通新调用遇到离线设备会报错，不自动排队或换机。</p>
+              <p className="pitfall-label">02 / EXECUTION</p>
+              <h3 id="pitfall-hands">The server can reason, but the tools may be elsewhere.</h3>
+              <p>Reading files, running commands, and using browsers often requires access to a user device. Running an MCP server on each device and adding a tunnel can seem sufficient, but treating this as the cloud connecting inward to each device gets the direction wrong. Devices behind NAT can sleep or lose connectivity; they need to connect outward, register, advertise capabilities, and reconnect.</p>
+              <p>A tunnel still leaves three tasks. Connectivity alone does not establish a registered, live member with declared capabilities: identity, heartbeats, and availability need maintenance. The tunnel does not confirm task delivery or receipt of results. With multiple devices online, dispatch must check capabilities and resolve which device should receive the work.</p>
+              <p className="pitfall-answer">The framework provides a remote-executor boundary so products can connect devices that initiate outbound connections, then reuse tool dispatch, result acknowledgement, and recovery waiting. Device directories, authorization, and target selection belong to the product; cross-process result recovery also requires persisted dispatch records. In the current Flops product, ordinary new calls to offline devices fail rather than queue or switch devices automatically.</p>
             </article>
             <article className="pitfall" aria-labelledby="pitfall-data">
-              <p className="pitfall-label">03 / 数据</p>
-              <h3 id="pitfall-data">对话与记忆，会流过你的库。</h3>
-              <p>任务开始读写真实数据后，你需要决定哪些字段该加密、谁能解密，以及恢复任务时密钥留多久。以 Flops 当前接入为例，启用加密的对话与 agent 的指定敏感字段支持加密存储，客户端支持本地解密。</p>
-              <p>日常登录采用客户端持有并解包用户主密钥、服务端保存加密信封的设计，同时保留离线恢复机制。云端在处理任务时会解密相关上下文；运行密钥可能为恢复和后台唤醒跨 run 暂存，清理也有失败边界。</p>
-              <p>当前聊天请求中的用户消息与引用仍是明文 JSON 字段，传输依赖 HTTPS/TLS；运行密钥另用 RSA 包装。指定字段之外，压缩摘要、部分日志与工具结果暂存仍有明文路径，字段加密的覆盖范围需要逐项确认。</p>
-              <p className="pitfall-answer">所以框架提供可组合的字段加密与传输密钥包装原语。受保护字段、认证和密钥存续由产品层决定；<a href="#privacy-boundaries">下文保留当前数据路径的具体边界</a>。</p>
+              <p className="pitfall-label">03 / DATA</p>
+              <h3 id="pitfall-data">Conversations and memory pass through your storage.</h3>
+              <p>Once tasks read and write real data, decide which fields to encrypt, who can decrypt them, and how long recovery keys should remain available. In the current Flops integration, selected sensitive conversation and agent fields support encrypted storage when encryption is enabled, with local client decryption.</p>
+              <p>During normal login, the client holds and unwraps the user master key while the server stores encrypted envelopes; offline recovery is also retained. The server decrypts relevant context while processing tasks. Runtime keys may remain across runs for recovery and background wakeups, and cleanup can fail.</p>
+              <p>User messages and references in current chat requests are plaintext JSON fields protected in transit by HTTPS/TLS; runtime keys are separately wrapped with RSA. Outside selected fields, summaries, some logs, and temporary tool results still have plaintext paths. Verify encryption coverage field by field.</p>
+              <p className="pitfall-answer">The framework provides composable field-encryption and transport-key-wrapping primitives. Your product chooses protected fields, authentication, and key lifetime; <a href="#privacy-boundaries">the concrete data-path boundaries are documented below</a>.</p>
             </article>
             <article className="pitfall" aria-labelledby="pitfall-capabilities">
-              <p className="pitfall-label">04 / 能力</p>
-              <h3 id="pitfall-capabilities">工具越来越多，别把所有能力一次塞给模型。</h3>
-              <p>一个 agent 能做什么，取决于它能调用什么工具。起初把几个函数列进去就够了；业务多起来后，每轮任务需要的工具不同，设备能提供的能力也不同，模型不必一直背着整张工具目录。</p>
-              <p>工具按包声明和注册，再按会话打开或关闭。模型只收到会话已打开或由产品层临时启用、且通过能力过滤的包内工具；根级基础工具另行提供，打开包不会顺带打开所有子包。可见性之外，真正派发时仍要检查目标设备、授权和安全策略。</p>
-              <p className="pitfall-answer">所以框架负责工具包注册与会话开关，让你把自己的业务工具接进来。框架不捆绑你的业务，包的内容、执行方式与产品策略仍由你定义。</p>
+              <p className="pitfall-label">04 / CAPABILITIES</p>
+              <h3 id="pitfall-capabilities">A growing tool catalog does not belong in every model request.</h3>
+              <p>An agent can do only what its tools allow. A few functions are enough initially, but larger products need different tools for different tasks and devices. The model need not carry the entire catalog on every turn.</p>
+              <p>Tools are declared and registered in packages, then opened or closed per session. The model receives tools from packages opened by the session or temporarily enabled by the product, filtered by capabilities. Root tools are supplied separately; opening a package does not open every child package. Actual dispatch must still check target devices, authorization, and safety policy.</p>
+              <p className="pitfall-answer">The framework manages tool registration and session package controls so you can connect business tools. It does not bundle your business logic; package contents, execution, and product policy remain yours.</p>
             </article>
           </div>
         </section>
 
         <section className="section" id="why">
-          <SectionHeading number="03" label="价值 / LESS TO BUILD" title="你会省掉的那几件事" />
-          <p className="section-intro">如果你正在自己写 agent 循环，下面这些工作可以复用框架的机制。你的产品层仍需接好身份、存储、设备和业务策略。</p>
+          <SectionHeading number="03" label="LESS TO BUILD" title="Work you can reuse" />
+          <p className="section-intro">If you are writing your own agent loop, these mechanisms can save implementation work. Your product still connects identity, storage, devices, and business policy.</p>
           <ol className="benefits-list">
-            <li><span className="benefit-number" aria-hidden="true">01</span><div><h3>刷新页面，长任务继续做</h3><p>执行与订阅解耦，所以用户离开页面或网络掉线时，已启动的工作仍继续推进。</p><p className="otherwise">不然你得自己把后台任务与连接的生命周期拆开，处理无人订阅时的执行。</p></div></li>
-            <li><span className="benefit-number" aria-hidden="true">02</span><div><h3>停止、等待、继续，都有明确的状态</h3><p>取消、挂起、恢复、重连有各自的控制路径，所以你能按任务当前状态接上用户操作。</p><p className="otherwise">不然你得自己维护这些状态机，处理停止检查、待回答记录、重启恢复与遗漏输出的回放。</p></div></li>
-            <li><span className="benefit-number" aria-hidden="true">03</span><div><h3>换个客户端，还能接着看同一轮工作</h3><p>会话记录与输出日志为多端续接提供基础，所以你接好共享存储、身份与路由后，可以让不同客户端继续查看。</p><p className="otherwise">不然你得自己保存历史、定位同一轮任务，并记录每个客户端读到了哪里。</p></div></li>
-            <li><span className="benefit-number" aria-hidden="true">04</span><div><h3>需要设备的工作，可以交给别处执行</h3><p>远程执行器把工具工作交给另一个进程或设备，所以主循环可以留在你的服务里。</p><p className="otherwise">不然你得自己设计派发、增量输出、停止与恢复记录的接入方式；设备选择和授权仍需产品层完成。</p></div></li>
-            <li><span className="benefit-number" aria-hidden="true">05</span><div><h3>前后端对“发生了什么”有共同约定</h3><p>事件与 wire 格式是任务状态和传输消息的明确约定，所以界面可以区分文本、工具结果、等待与结束；Beta 阶段不承诺版本兼容。</p><p className="otherwise">不然你得自己定义消息类型、先后顺序与回放位置，并让服务端和客户端保持一致。</p></div></li>
-            <li><span className="benefit-number" aria-hidden="true">06</span><div><h3>敏感字段有明确的加解密接入位置</h3><p>加密原语是基础加解密操作，字段加密接口让产品层显式选择要保护的数据，所以你可以接入自己的存储与密钥流程。</p><p className="otherwise">不然你得自己组织这些基础操作与字段映射；密钥管理、认证和哪些数据需要加密仍由产品层负责。</p></div></li>
+            <li><span className="benefit-number" aria-hidden="true">01</span><div><h3>Long tasks survive page refreshes</h3><p>Execution is independent of subscriptions, so work continues when users leave a page or lose their connection.</p><p className="otherwise">Otherwise, you must separate background-task and connection lifetimes yourself and handle execution with no subscribers.</p></div></li>
+            <li><span className="benefit-number" aria-hidden="true">02</span><div><h3>Explicit states for stopping, waiting, and continuing</h3><p>Cancellation, suspension, recovery, and reconnection have distinct control paths, so user actions can follow the current task state.</p><p className="otherwise">Otherwise, you must maintain those state machines, stop checks, pending-answer records, restart recovery, and missed-output replay yourself.</p></div></li>
+            <li><span className="benefit-number" aria-hidden="true">03</span><div><h3>Follow the same task from another client</h3><p>Conversation records and output logs support reconnection across clients. Connect shared storage, identity, and routing to let another client continue observing.</p><p className="otherwise">Otherwise, you must persist history, locate the same execution, and track each client's read position.</p></div></li>
+            <li><span className="benefit-number" aria-hidden="true">04</span><div><h3>Send device-dependent work elsewhere</h3><p>A remote executor runs tool work in another process or device while the main loop stays in your service.</p><p className="otherwise">Otherwise, you must design integration for dispatch, incremental output, stopping, and recovery records. Device selection and authorization still belong to your product.</p></div></li>
+            <li><span className="benefit-number" aria-hidden="true">05</span><div><h3>A shared vocabulary for what happened</h3><p>Events and wire formats define task state and transport messages, letting the UI distinguish text, tool results, waiting, and completion. Version compatibility is not guaranteed during Beta.</p><p className="otherwise">Otherwise, you must define message types, ordering, and replay positions and keep server and client implementations aligned.</p></div></li>
+            <li><span className="benefit-number" aria-hidden="true">06</span><div><h3>Explicit encryption boundaries for sensitive fields</h3><p>Cryptographic primitives supply basic operations, and field encryption lets the product explicitly choose protected data. Connect your own storage and key workflows.</p><p className="otherwise">Otherwise, you must organize the primitives and field mappings yourself. Key management, authentication, and encryption scope still belong to your product.</p></div></li>
           </ol>
         </section>
 
         <section className="section" id="value">
-          <SectionHeading number="04" label="依据 / WHY THIS FRAMEWORK" title="它凭什么" />
-          <p className="section-intro">四条价值，对应四组边界。框架提供可复用的机制，产品层把存储、安全与设备策略接起来。</p>
+          <SectionHeading number="04" label="WHY THIS FRAMEWORK" title="Why this framework" />
+          <p className="section-intro">Four benefits, each with defined boundaries. The framework supplies reusable mechanisms; your product connects storage, security, and device policy.</p>
           <div className="value-list">
             <article className="value-item">
-              <div className="value-heading"><span aria-hidden="true">01</span><h3>开源：flops-agent 采用 MIT 许可证</h3></div>
-              <p>对你意味着：可以按许可证条款使用、修改和分发 flops-agent。框架代码已在 GitHub 公开，PyPI 已发布 <code>flops-agent</code> 0.2.0，可直接安装。这里的许可声明仅针对这个框架。</p>
-              <p className="source-note">阅读：<a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/LICENSE">MIT 许可证</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/pyproject.toml">Python 包信息</a></p>
+              <div className="value-heading"><span aria-hidden="true">01</span><h3>Open source under the MIT license</h3></div>
+              <p>You can use, modify, and distribute flops-agent under the license terms. The framework source is public on GitHub, and PyPI provides <code>flops-agent</code> 0.2.0 for installation. This licensing statement applies only to this framework.</p>
+              <p className="source-note">Read: <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/Xenotech-Studio/flops-agent/blob/master/pyproject.toml">Python package metadata</a></p>
             </article>
             <article className="value-item">
-              <div className="value-heading"><span aria-hidden="true">02</span><h3>面向云端：主循环在服务端推进</h3></div>
-              <p>主 agent 循环由服务端运行：客户端提交输入、订阅输出，需要落到设备上的工具再交给执行端。对你意味着：框架作为 Python 库，可以部署在应用自己的服务里；客户端断线不会终止已启动的任务。</p>
+              <div className="value-heading"><span aria-hidden="true">02</span><h3>Server-side execution</h3></div>
+              <p>The main agent loop runs on the server. Clients submit input and subscribe to output; device-dependent tools go to an executor. As a Python library, the framework fits inside your application service, and client disconnection does not stop an existing task.</p>
             </article>
             <article className="value-item" id="privacy-boundaries">
-              <div className="value-heading"><span aria-hidden="true">03</span><h3>敏感字段加密存储，客户端支持本地解密</h3></div>
-              <p>支持对对话与 agent 记忆中的敏感字段加密存储、在客户端本地解密；云端 agent 在处理任务时可解密相关上下文，并保留恢复机制。对你意味着：可以在产品层接入这条存储与解密路径，同时需要明确哪些数据在任务处理时会成为明文。</p>
-              <div className="implementation-note"><span className="small-label">Flops 产品层 · 当前数据路径</span><p>下面说明实际的数据处理边界；框架的基础加解密操作需要由产品层接入。</p></div>
+              <div className="value-heading"><span aria-hidden="true">03</span><h3>Encrypted sensitive fields with local client decryption</h3></div>
+              <p>Sensitive conversation and agent-memory fields can be encrypted at rest and decrypted locally by the client. The server-side agent can decrypt relevant context while processing a task, with recovery mechanisms retained. Your product can integrate this path while explicitly identifying which data becomes plaintext during execution.</p>
+              <div className="implementation-note"><span className="small-label">Flops product layer · current data paths</span><p>These are the actual data-processing boundaries. The product must integrate the framework's cryptographic primitives.</p></div>
               <dl className="privacy-facts">
-                <div><dt>任务处理时</dt><dd>服务端运行一轮任务时，会解密并拿到相关明文：密钥写入运行时上下文，解密后的相关上下文交给模型与工具执行使用。因此，客户端支持本地解密，服务端也会解密相关上下文。</dd></div>
-                <div><dt>聊天请求传输时</dt><dd>用户消息与引用仍以明文 JSON 字段发送，只有运行密钥使用 RSA 包装；因此，这些聊天字段的传输保护依赖 HTTPS/TLS 加密连接。SSE 加密帧保护流式输出，执行端工具链路是另一保护层，两者不能替代聊天请求的传输保护。</dd></div>
-                <div><dt>运行密钥存续</dt><dd>日常登录由客户端持有并解包用户主密钥，服务端保存加密信封，同时保留离线恢复机制。运行密钥另可为恢复与后台唤醒暂存在服务器内存或 Linux keyring，部分路径跨 run 保留；清理是尽力执行，有失败边界。</dd></div>
-                <div><dt>存储覆盖范围</dt><dd>仅对启用加密的对象处理指定敏感字段。普通元数据、压缩摘要、部分日志与工具结果暂存仍有明文路径；旧数据也存在兼容读取和写入路径，不能据字段加密推断所有历史副本已清理。</dd></div>
+                <div><dt>During task processing</dt><dd>The server decrypts relevant data while running a task. Keys enter runtime context, and decrypted context is supplied to the model and tool execution. Local client decryption therefore coexists with server-side decryption of relevant context.</dd></div>
+                <div><dt>During chat-request transmission</dt><dd>User messages and references are sent as plaintext JSON fields; only runtime keys are RSA-wrapped. These chat fields rely on HTTPS/TLS for transport protection. Encrypted SSE frames protect streaming output, and executor tool connections form a separate protection layer; neither replaces chat-request transport protection.</dd></div>
+                <div><dt>Runtime key lifetime</dt><dd>During normal login, the client holds and unwraps the user master key and the server stores encrypted envelopes, with offline recovery retained. Runtime keys may also remain in server memory or the Linux keyring for recovery and background wakeups, sometimes across runs. Cleanup is best-effort and can fail.</dd></div>
+                <div><dt>Storage coverage</dt><dd>Only designated sensitive fields on encryption-enabled objects are handled. Ordinary metadata, summaries, some logs, and temporary tool results still have plaintext paths. Legacy data also has compatibility read and write paths; field encryption does not prove that every historical copy has been removed.</dd></div>
               </dl>
-              <div className="value-boundary"><strong>框架只提供加密原语。</strong><p>AES-256-GCM 用于基础数据加解密；RSA-OAEP-SHA256 用于传输密钥包装；显式字段加解密让调用方指定要处理的字段。所以你仍需选择受保护字段，并把密钥与操作接入自己的存储路径。</p><p>密钥管理、账号认证、KDF（密钥派生）、密钥暂存和 Redis 存储都在产品层。所以接入这些原语之后，产品层仍要完成生成密钥、验证身份、管理密钥存续与实际存储的流程。</p></div>
+              <div className="value-boundary"><strong>The framework provides cryptographic primitives only.</strong><p>AES-256-GCM handles basic encryption and decryption; RSA-OAEP-SHA256 wraps transport keys; explicit field operations let callers select the fields. You still choose protected data and connect keys and operations to your storage path.</p><p>Key management, account authentication, KDFs (key derivation), key retention, and Redis storage belong to the product. Integrating the primitives still leaves key generation, identity verification, key lifetime, and actual storage to your application.</p></div>
             </article>
             <article className="value-item" id="device-boundaries">
-              <div className="value-heading"><span aria-hidden="true">04</span><h3>多设备接入：个人电脑与云主机使用统一协议</h3></div>
-              <p>个人电脑和云主机可以通过统一的执行端协议接入；任务能否执行，取决于该设备的能力、环境、授权和在线状态。对你意味着：可以把不同设备接进自己的系统，派发时仍要检查目标设备是否满足条件。</p>
-              <div className="implementation-note"><span className="small-label">Flops 产品层 · 当前设备行为</span><p>下面的规则属于当前产品实现；在自己的系统里，设备发现、选择与授权仍需产品层完成。</p></div>
-              <div className="table-scroll" tabIndex={0} role="region" aria-label="Flops 当前离线与恢复行为">
+              <div className="value-heading"><span aria-hidden="true">04</span><h3>A shared executor protocol for personal and cloud machines</h3></div>
+              <p>Personal computers and cloud hosts can connect through the same executor protocol. Whether work can run depends on the device's capabilities, environment, authorization, and availability. Your product can connect different devices while checking target suitability at dispatch.</p>
+              <div className="implementation-note"><span className="small-label">Flops product layer · current device behavior</span><p>These rules describe the current product implementation. In your system, device discovery, selection, and authorization remain product responsibilities.</p></div>
+              <div className="table-scroll" tabIndex={0} role="region" aria-label="Current Flops offline and recovery behavior">
                 <table className="device-table">
-                  <caption className="sr-only">不同设备状态的当前处理方式及其影响</caption>
-                  <thead><tr><th scope="col">遇到的情况</th><th scope="col">当前处理方式</th></tr></thead>
+                  <caption className="sr-only">How device states are handled and what that means</caption>
+                  <thead><tr><th scope="col">Situation</th><th scope="col">Current behavior</th></tr></thead>
                   <tbody>
-                    <tr><th scope="row">普通派发时，设备离线</th><td>直接返回可识别错误，不会自动排队。因此，产品需要向用户说明未派发成功。</td></tr>
-                    <tr><th scope="row">绑定或会话所属设备离线</th><td>拒绝派发并请示是等待还是换机。因此，继续使用哪台设备需要明确决定。</td></tr>
-                    <tr><th scope="row">任务已经派发</th><td>支持结果回放，不重复下发。因此，恢复时接回已有任务的结果。</td></tr>
-                    <tr><th scope="row">运行中失联</th><td>有约 90 秒宽限，并在重连后对账，即核对已派发任务的状态与结果。因此，恢复要走核对流程；该时长是当前产品行为，不是框架时限承诺。</td></tr>
+                    <tr><th scope="row">Device offline during ordinary dispatch</th><td>Returns an identifiable error without automatic queuing. The product needs to explain that dispatch did not succeed.</td></tr>
+                    <tr><th scope="row">The bound or session-owned device is offline</th><td>Rejects dispatch and asks whether to wait or switch devices. The next target requires an explicit decision.</td></tr>
+                    <tr><th scope="row">Task already dispatched</th><td>Supports result replay without redispatching. Recovery reconnects to the existing task's result.</td></tr>
+                    <tr><th scope="row">Connection lost during execution</th><td>Allows a grace period of about 90 seconds, then reconciles dispatched task state and results on reconnection. Recovery must use that reconciliation path. This duration describes the current product, not a framework guarantee.</td></tr>
                   </tbody>
                 </table>
               </div>
               <ul className="device-rules">
-                <li><strong>浏览器工具必须显式指定设备。</strong>因此，产品需要明确告诉执行链路在哪台设备上操作浏览器。</li>
-                <li><strong>资源节点走独立路由。</strong>因此，接入这类节点时需要处理其单独的派发路径。</li>
-                <li><strong>能力由设备自己声明。</strong>缺少能力时直接报错，不会自动改投另一台；因此，产品需要检查能力并处理失败。</li>
-                <li><strong>手机端目前只是客户端。</strong>当前未找到它作为通用工具执行端的依据，因此这里不把手机列为同等的执行设备。</li>
+                <li><strong>Browser tools require an explicit device.</strong> The product must identify the device on which the browser should operate.</li>
+                <li><strong>Resource nodes use separate routing.</strong> Integrating these nodes requires their own dispatch path.</li>
+                <li><strong>Devices declare their own capabilities.</strong> Missing capabilities cause an error rather than automatic rerouting. The product must check capabilities and handle failures.</li>
+                <li><strong>Phones are currently clients only.</strong> There is no verified basis here for treating them as general-purpose tool executors, so they are not listed as equivalent execution devices.</li>
               </ul>
             </article>
           </div>
         </section>
 
         <section className="section" id="showcase">
-          <SectionHeading number="05" label="实例 / SHOWCASE" title="Flops 只是其中一个实现" />
-          <p className="section-intro">这页的重点是：别人能不能用 flops-agent 做自己的 agent 系统。你可以将框架嵌入自己的产品，接入自己的模型、存储、执行器与策略。</p>
-          <div className="showcase-existing"><span className="small-label">已存在的实例 · Flops</span><h3>我们自己的实现，作为参考实现 / showcase</h3><p>Flops 是构建在 flops-agent 之上的一个具体产品，用来展示这些机制如何接入实际应用。目前只有 Flops 是已存在的实例；它的账号、安全与设备策略属于自己的产品层，不限定框架的其他用法。</p></div>
-          <div className="possibilities"><p className="small-label">可以这么用（设想）</p><ul><li><strong>企业级 agent 自动化</strong><span>用框架组织企业自己的任务流程，接入企业自己的模型、存储、工具与权限策略。</span></li><li><strong>其他个人助理工具</strong><span>围绕个人需要构建自己的助理产品，选择自己的客户端、工具和运行环境。</span></li></ul><p className="aside-note">以上是使用方向的设想，尚不是已交付的实例或已验证的兼容范围。</p></div>
+          <SectionHeading number="05" label="SHOWCASE" title="Flops is one implementation" />
+          <p className="section-intro">The question is whether others can build their own agent systems with flops-agent. Embed the framework in your product and connect your own models, storage, executors, and policies.</p>
+          <div className="showcase-existing"><span className="small-label">Existing implementation · Flops</span><h3>Our implementation, provided as a reference and showcase</h3><p>Flops is a product built on flops-agent that demonstrates integration in a real application. It is currently the only existing showcase. Its account, security, and device policies belong to its product layer and do not constrain other framework uses.</p></div>
+          <div className="possibilities"><p className="small-label">Possible uses (ideas)</p><ul><li><strong>Enterprise agent automation</strong><span>Organize enterprise workflows with the framework and connect the organization's models, storage, tools, and authorization policies.</span></li><li><strong>Other personal assistant products</strong><span>Build an assistant around personal needs, choosing your own clients, tools, and runtime environment.</span></li></ul><p className="aside-note">These are possible directions, not delivered implementations or a verified compatibility matrix.</p></div>
         </section>
 
         <section className="section" id="quick-start">
-          <SectionHeading number="06" label="动手 / QUICK START" title="5 分钟，观察一轮真正的执行。" />
-          <p className="section-intro">先用确定性的离线演示理解生命周期。安装依赖后，演示运行无需模型账号、网络连接或模型密钥。</p>
-          <h3 className="step-heading"><span>01</span>从 PyPI 安装框架</h3>
-          <p>使用 Python ≥ 3.10，建议先进入虚拟环境。安装的是 Python 库；完成安装后，按下一步保存并运行 <code>hello.py</code>。</p>
-          <CodeBlock title="安装 flops-agent" language="SHELL" code={installExample} />
-          <h3 className="step-heading"><span>02</span>先启动工作，再观察输出</h3>
-          <p>完成上面的安装后，将下列完整代码保存为 <code>hello.py</code>。<code>DemoLLM</code> 是演示用假适配器，只生成固定文本；这里使用的 InMemoryDatabase 只在进程内保存会话，所以关闭程序后不会保留数据。</p>
-          <p className="example-explanation"><code>start()</code> 启动后台任务，<code>subscribe()</code> 观察事件；所以读取输出的连接可以独立于执行过程。代码里的 <code>Runtime</code> 负责长期装配，<code>Session</code> 保存会话，<code>Query</code> 表达新输入，<code>Run</code> 是本轮执行的句柄；所以基础设施、会话和当前任务有各自的存放位置。</p>
+          <SectionHeading number="06" label="QUICK START" title="Observe a real run in five minutes." />
+          <p className="section-intro">Understand the lifecycle with a deterministic offline demo. After installing dependencies, running it requires no model account, network connection, or model key.</p>
+          <h3 className="step-heading"><span>01</span>Install the framework from PyPI</h3>
+          <p>Use Python ≥ 3.10, preferably in a virtual environment. This installs a Python library. Next, save and run <code>hello.py</code>.</p>
+          <CodeBlock title="Install flops-agent" language="SHELL" code={installExample} />
+          <h3 className="step-heading"><span>02</span>Start work, then observe output</h3>
+          <p>After installation, save the complete code below as <code>hello.py</code>. <code>DemoLLM</code> is a demo adapter that generates fixed text. InMemoryDatabase keeps conversations only in this process, so data does not survive program exit.</p>
+          <p className="example-explanation"><code>start()</code> starts background work, while <code>subscribe()</code> observes events, separating the output connection from execution. In this example, <code>Runtime</code> holds reusable configuration, <code>Session</code> stores the conversation, <code>Query</code> represents new input, and <code>Run</code> is the handle for this run. Infrastructure, conversation state, and execution each have their own object.</p>
           <CodeBlock title="hello.py" language="PYTHON" code={codeExample} />
-          <CodeBlock title="运行自己的最小例子" language="SHELL" code="python hello.py" />
-          <div className="expected-output"><span className="eyebrow">预期输出</span><pre><code>{'你好，这是一轮独立的后台执行。\nRun status: done'}</code></pre></div>
-          <p className="aside-note">接入真实模型时，用自己的 <code>LLMStreamClient</code> 替换 DemoLLM；它约定了模型如何返回流式片段，所以主循环可以沿用。也可先执行 <code>pip install "flops-agent[providers]"</code>，再配置随包提供的 <code>OpenAIStreamClient</code>；它对接 OpenAI 兼容的流式协议，所以你可以在产品层填入端点、模型名称和密钥。本页不承诺未验证的供应商兼容范围。</p>
-          <h3 className="step-heading"><span>03</span>可选：运行仓库示例</h3>
-          <p><code>docs/sample_product/server.py</code> 随公开仓库提供，不包含在 PyPI 包中。要观察文本、工具和结束事件的 SSE 输出，先克隆仓库，再在仓库根目录安装源码依赖并运行脚本。</p>
-          <CodeBlock title="获取源码并运行仓库示例" language="SHELL" code={repositoryExample} />
-          <p className="aside-note"><code>server.py</code> 默认使用 ScriptedLLM；保持 <code>EXAMPLE_PROVIDER_API_KEY</code> 未设置即可运行离线演示。它不监听网络端口，执行器演示与 HTML 客户端参考仍需产品层接线，尚不是完整三进程成品。</p>
-          <p className="source-note">阅读：<a href="/docs/01-quick-start">快速开始</a> · <a href="/docs/api_surface">公开 API 契约</a></p>
+          <CodeBlock title="Run your minimal example" language="SHELL" code="python hello.py" />
+          <div className="expected-output"><span className="eyebrow">Expected output</span><pre><code>{'Hello, this is an independent background run.\nRun status: done'}</code></pre></div>
+          <p className="aside-note">For a real model, replace DemoLLM with your own <code>LLMStreamClient</code>. Its streaming-chunk contract lets you retain the main loop. Alternatively, run <code>pip install "flops-agent[providers]"</code>, then configure the bundled <code>OpenAIStreamClient</code>. It implements an OpenAI-compatible streaming protocol; supply the endpoint, model name, and key in your product. This page does not claim unverified provider compatibility.</p>
+          <h3 className="step-heading"><span>03</span>Optional: run the repository example</h3>
+          <p><code>docs/sample_product/server.py</code> ships with the public repository, not the PyPI package. To observe SSE text, tool, and completion events, clone the repository, install source dependencies from its root, and run the script.</p>
+          <CodeBlock title="Get the source and run the example" language="SHELL" code={repositoryExample} />
+          <p className="aside-note"><code>server.py</code> uses ScriptedLLM by default. Leave <code>EXAMPLE_PROVIDER_API_KEY</code> unset for the offline demo. It does not listen on a port. The executor demo and HTML client reference still need product integration; this is not a complete three-process application.</p>
+          <p className="source-note">Read: <a href="/docs/01-quick-start">Quick start</a> · <a href="/docs/api_surface">Public API contract</a></p>
         </section>
 
         <section className="section" id="progress">
-          <SectionHeading number="07" label="状态 / PROJECT STATUS" title="当前进展，按已经存在的东西说。" />
-          <p className="section-intro">框架代码与 PyPI 0.2.0 已公开发布。项目仍处于 Beta 阶段，API 不承诺版本兼容，生产接入需要产品层完成部署与运维。</p>
+          <SectionHeading number="07" label="PROJECT STATUS" title="Status based on what exists today." />
+          <p className="section-intro">The source and PyPI 0.2.0 are publicly released. The project remains in Beta with no version-compatibility guarantee. Production integration requires deployment and operations work in your product.</p>
           <div className="progress-grid">
-            <article className="progress-panel available"><h3><span aria-hidden="true">✓</span> 已具备</h3><ul>
-              <li><strong>仓库已公开（MIT）、PyPI 已有 <code>flops-agent</code> 0.2.0，可 <code>pip install</code></strong><span>可直接执行 <code>pip install flops-agent</code>；源码、许可证与安装包均已有公开入口。</span></li>
-              <li><strong>8 篇渐进文档 + API 契约</strong><span>API 契约列出公开接口，所以你能核对可以依赖的接入点；正文按 Quick start 到 Worked example 组织。</span></li>
-              <li><strong>CI 与 PyPI 发布工作流</strong><span>CI 自动执行测试、类型检查和站点构建；PyPI 已发布 0.2.0，可直接下载和安装。</span></li>
-              <li><strong>sample_product 演示</strong><span>展示服务端、执行器与客户端的职责边界。</span></li>
+            <article className="progress-panel available"><h3><span aria-hidden="true">✓</span> Available</h3><ul>
+              <li><strong>Public repository (MIT), with <code>flops-agent</code> 0.2.0 on PyPI, installable using <code>pip install</code></strong><span>You can run <code>pip install flops-agent</code> directly. Source, license, and package all have public entry points.</span></li>
+              <li><strong>Eight progressive tutorials and an API contract</strong><span>The API contract lists public interfaces you can check before integrating. The tutorial sequence runs from Quick start to Worked example.</span></li>
+              <li><strong>CI and PyPI release workflows</strong><span>CI runs tests, type checks, and website builds. PyPI 0.2.0 is available to download and install.</span></li>
+              <li><strong>sample_product demo</strong><span>Shows the responsibilities of the server, executor, and client.</span></li>
             </ul></article>
-            <article className="progress-panel pending"><h3><span aria-hidden="true">—</span> 尚未具备</h3><ul>
-              <li><strong>官方托管与一键部署</strong><span>目前交付框架，部署方案由产品层完成。</span></li>
-              <li><strong>完整三进程成品</strong><span>HTTP / WebSocket 是服务间的传输连接，示例尚未接通；所以仍需补齐传输与恢复入口。</span></li>
-              <li><strong>稳定 API 与服务承诺</strong><span>Beta 表示仍在演进，所以不承诺版本兼容；SLA 是服务级别保证，目前不提供。</span></li>
+            <article className="progress-panel pending"><h3><span aria-hidden="true">—</span> Not included</h3><ul>
+              <li><strong>Official hosting or one-click deployment</strong><span>The deliverable is a framework; deployment belongs to the product.</span></li>
+              <li><strong>A complete three-process application</strong><span>The example does not wire up HTTP/WebSocket transport between services. Transport and recovery entry points still need implementation.</span></li>
+              <li><strong>Stable API and service commitments</strong><span>Beta means the project is evolving, without guaranteed version compatibility. No service-level agreement (SLA) is offered.</span></li>
             </ul></article>
           </div>
-          <p className="source-note">阅读：<a href="https://github.com/Xenotech-Studio/flops-agent">GitHub 公开仓库</a> · <a href="https://pypi.org/project/flops-agent/0.2.0/">PyPI 0.2.0</a> · <a href="/docs/08-worked-example">完整示例导读</a></p>
+          <p className="source-note">Read: <a href="https://github.com/Xenotech-Studio/flops-agent">Public GitHub repository</a> · <a href="https://pypi.org/project/flops-agent/0.2.0/">PyPI 0.2.0</a> · <a href="/docs/08-worked-example">Worked example guide</a></p>
         </section>
 
         <section className="section" id="non-goals">
-          <SectionHeading number="08" label="非目标 / NON-GOALS" title="使用之前，先明确它不做什么。" />
+          <SectionHeading number="08" label="NON-GOALS" title="Know what it does not provide before you start." />
           <ul className="non-goals-list">
-            <li><span aria-hidden="true">01</span><div><h3>不是开箱即用的服务</h3><p>需要嵌入产品层，完成存储、执行器、部署和业务策略。</p></div></li>
-            <li><span aria-hidden="true">02</span><div><h3>不内置模型与密钥</h3><p>提供适配接口与客户端；模型选择、Key 和密钥管理由你提供。</p></div></li>
-            <li><span aria-hidden="true">03</span><div><h3>不含账号与 HTTP 服务</h3><p>标准 SSE 提供流式事件编码，所以你能复用输出格式；路由、认证、权限和传输仍属产品层。</p></div></li>
-            <li><span aria-hidden="true">04</span><div><h3>不承诺 SLA</h3><p>SLA 是服务级别保证，目前不提供；所以你需要自行安排产品的可用性与响应保障。Beta 阶段也不承诺稳定的版本兼容性。</p></div></li>
+            <li><span aria-hidden="true">01</span><div><h3>Not a ready-to-use service</h3><p>Embed it in a product and complete storage, executors, deployment, and business policy.</p></div></li>
+            <li><span aria-hidden="true">02</span><div><h3>No bundled models or credentials</h3><p>Adapters and clients are provided; model selection, credentials, and key management are yours.</p></div></li>
+            <li><span aria-hidden="true">03</span><div><h3>No account system or HTTP server</h3><p>Standard SSE supplies streaming-event encoding. Reuse that format while providing routes, authentication, authorization, and transport in your product.</p></div></li>
+            <li><span aria-hidden="true">04</span><div><h3>No SLA</h3><p>No service-level agreement is offered. You must arrange product availability and response guarantees. Beta also carries no stable version-compatibility promise.</p></div></li>
           </ul>
         </section>
 
         <section className="section" id="mechanics">
-          <SectionHeading number="09" label="接入 / MECHANICS" title="机制细节（想深入再看）" />
-          <p className="section-intro">缝合口是可以替换实现的接口，所以你可以把模型、存储与执行环境接到同一套生命周期机制上。下面再看具体名称与限制。</p>
-          <div className="table-scroll" tabIndex={0} role="region" aria-label="框架接口及其接入意义">
+          <SectionHeading number="09" label="MECHANICS" title="Integration details, when you need them" />
+          <p className="section-intro">Replaceable interfaces let you connect models, storage, and execution environments to the same lifecycle mechanisms. Here are the names and boundaries.</p>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Framework interfaces and their integration roles">
             <table className="seams-table">
-              <caption className="sr-only">缝合口与对产品开发者的意义</caption>
-              <thead><tr><th scope="col">接线点</th><th scope="col">对你意味着什么</th></tr></thead>
+              <caption className="sr-only">Extension boundaries and what they mean for product developers</caption>
+              <thead><tr><th scope="col">Integration point</th><th scope="col">What it provides</th></tr></thead>
               <tbody>
-                <tr><th scope="row"><code>LLMStreamClient</code></th><td>约定模型如何返回流式片段，所以更换模型接入时可以保留主循环。</td></tr>
-                <tr><th scope="row"><code>ToolExecutor</code><br /><code>ExecutorLink</code></th><td>前者接收工具派发，后者提供远端连接的协议接入，所以工具可以在另一个进程或设备执行。设备选择与授权仍需产品层实现。</td></tr>
-                <tr><th scope="row"><code>Database</code></th><td>约定会话的读取、追加、截断和更新，所以你可以接上自己的生产数据库，保留框架的会话写入机制。</td></tr>
-                <tr><th scope="row"><code>RunStore</code></th><td>保存执行状态与回放日志，所以持久存储可以为重连和重启恢复提供依据。</td></tr>
-                <tr><th scope="row"><code>Inbox</code></th><td>接收执行过程中到来的新输入，所以消息可以在当前一步或一轮结束的边界进入后续处理。</td></tr>
-                <tr><th scope="row"><code>ToolRegistry</code></th><td>登记工具及其派发信息，所以你能组织自己的工具目录；工具文案、能力筛选和安全规则由产品层决定。</td></tr>
-                <tr><th scope="row"><code>crypto</code></th><td>提供基础加解密与显式字段操作，所以你能接入自己的字段映射和存储流程。完整的数据处理边界见上文“敏感字段加密存储”。</td></tr>
+                <tr><th scope="row"><code>LLMStreamClient</code></th><td>Defines how models return streaming chunks, so the main loop can stay when a model integration changes.</td></tr>
+                <tr><th scope="row"><code>ToolExecutor</code><br /><code>ExecutorLink</code></th><td>The first receives tool dispatch; the second provides a remote-connection protocol boundary. Tools can execute in another process or device. Device selection and authorization remain product responsibilities.</td></tr>
+                <tr><th scope="row"><code>Database</code></th><td>Defines conversation reads, appends, truncation, and updates so you can connect a production database and retain framework persistence behavior.</td></tr>
+                <tr><th scope="row"><code>RunStore</code></th><td>Stores execution state and replay logs. Persistent storage can support reconnection and restart recovery.</td></tr>
+                <tr><th scope="row"><code>Inbox</code></th><td>Receives input arriving during execution so messages can enter subsequent processing at step or turn boundaries.</td></tr>
+                <tr><th scope="row"><code>ToolRegistry</code></th><td>Registers tools and dispatch information to organize your catalog. Tool descriptions, capability filtering, and safety rules belong to your product.</td></tr>
+                <tr><th scope="row"><code>crypto</code></th><td>Provides cryptographic primitives and explicit field operations for your mappings and storage flow. See the sensitive-field section above for the full data-processing boundaries.</td></tr>
               </tbody>
             </table>
           </div>
-          <p className="aside-note"><code>Executor</code> 在这里是执行器角色的名称，所以不要把它当作可以直接导入的顶层类；工具派发实际接入 <code>ToolExecutor</code>，其作用见上表。</p>
+          <p className="aside-note"><code>Executor</code> is an executor role here, not an importable top-level class. Tool dispatch actually connects through <code>ToolExecutor</code>, described in the table above.</p>
 
           <div id="lifecycle" className="mechanics-subsection">
-            <h3>一条执行时间线</h3>
-            <p className="mechanics-intro">取消、挂起与恢复是按条件进入的分支，所以每轮任务不必依次经历所有状态。</p>
+            <h3>An execution timeline</h3>
+            <p className="mechanics-intro">Cancellation, suspension, and recovery are conditional branches. A task does not pass through every state in sequence.</p>
             <ol className="timeline">
-              <li><span className="timeline-index" aria-hidden="true">1</span><div><h3>装配 <code>Runtime</code></h3><p>它保存长期复用的模型、工具和存储配置，所以无需每次请求都重建这些接入关系。</p></div></li>
-              <li><span className="timeline-index" aria-hidden="true">2</span><div><h3>调用 <code>start(session, query)</code></h3><p>它立即返回本轮执行句柄，并让 Runner 在后台推进；Runner 是一轮任务的状态机，所以读取输出的连接不用驱动执行。</p></div></li>
-              <li><span className="timeline-index" aria-hidden="true">3</span><div><h3>订阅模型与工具事件</h3><p><code>TextDelta → ToolCallStarted → ToolExecuting → ToolResult</code> 分别描述文本增量、工具调用开始、工具执行与结果；所以界面能按明确事件展示进展。<code>LoopFinished</code> 表示正常结束，所以客户端可以收起运行状态。</p></div></li>
-              <li><span className="timeline-index" aria-hidden="true">4</span><div><h3>取消，或等待人工回答</h3><p><code>await run.stop()</code> 请求在检查点停止，所以它是明确的取消入口。<code>InteractionRequest</code> 表示工具请求人工输入，随后发出 <code>InteractionRequested</code> 与 <code>Suspended</code>；所以待回答的交互可以被记录并继续。</p></div></li>
-              <li><span className="timeline-index" aria-hidden="true">5</span><div><h3>回答后继续，或在重启后恢复</h3><p><code>Query.answer(...)</code> 提交人工回答，所以后续执行能把回答纳入会话。<code>runtime.recover(resume)</code> 调度产品层的恢复入口，所以重启后可以按保存的事实复用原执行标识。</p></div></li>
+              <li><span className="timeline-index" aria-hidden="true">1</span><div><h3>Assemble <code>Runtime</code></h3><p>It retains reusable model, tool, and storage configuration, avoiding reconstruction on every request.</p></div></li>
+              <li><span className="timeline-index" aria-hidden="true">2</span><div><h3>Call <code>start(session, query)</code></h3><p>It returns a run handle immediately and advances Runner in the background. Runner manages the task state machine; the output connection does not drive execution.</p></div></li>
+              <li><span className="timeline-index" aria-hidden="true">3</span><div><h3>Subscribe to model and tool events</h3><p><code>TextDelta → ToolCallStarted → ToolExecuting → ToolResult</code> describe text deltas, tool-call starts, tool execution, and results, giving the UI explicit progress events. <code>LoopFinished</code> marks normal completion so the client can clear its running indicator.</p></div></li>
+              <li><span className="timeline-index" aria-hidden="true">4</span><div><h3>Stop, or wait for a human answer</h3><p><code>await run.stop()</code> requests a stop at a checkpoint and is an explicit cancellation entry point. <code>InteractionRequest</code> means a tool requests human input, followed by <code>InteractionRequested</code> and <code>Suspended</code>, allowing the pending interaction to be recorded and continued.</p></div></li>
+              <li><span className="timeline-index" aria-hidden="true">5</span><div><h3>Continue after an answer, or recover after restart</h3><p><code>Query.answer(...)</code> submits a human answer for subsequent execution to incorporate into the conversation. <code>runtime.recover(resume)</code> schedules the product recovery entry point so a restart can reuse the original execution identity from persisted evidence.</p></div></li>
             </ol>
           </div>
-          <div className="callout"><strong>恢复依赖持久保存的数据与产品层的恢复入口。</strong><p>内存存储不跨进程重启保留数据，所以生产恢复需要持久化会话与执行日志。幂等性指重试时避免重复副作用，所以产品层执行器必须记录并复用已派发任务。<code>recover()</code> 返回已调度数量，所以不能把这个数字当作恢复成功数量。</p></div>
+          <div className="callout"><strong>Recovery depends on persisted data and a product recovery entry point.</strong><p>In-memory stores do not survive process restarts; production recovery needs persisted conversations and run logs. Idempotency avoids repeated side effects on retries, so the product executor must record and reuse dispatched tasks. <code>recover()</code> returns the number scheduled, not the number successfully recovered.</p></div>
           <div className="mechanics-subsection">
-            <h3>事件格式与重连的当前边界</h3>
-            <p><code>WireCodec</code> 将事件编码为标准 SSE，也就是可逐条送达客户端的消息格式；所以产品可以复用输出约定，再接自己的服务路由。<code>run.subscribe(from_cursor=...)</code> 从保存的位置回放并继续订阅；cursor 是服务端给出的日志位置，所以客户端应保存它，不能靠数消息猜测。</p>
-            <p className="aside-note">当前没有按 <code>run_id</code> 从共享存储还原只读 Run 的门面，也就是直接读取既有执行的统一入口；所以多 worker（多个服务进程）场景要由产品层定位执行所在进程，或实现自己的回放路由。默认 SSE 回放帧不补发 cursor，所以仅收到回放就关闭的客户端仍需产品层提供游标策略。</p>
+            <h3>Current event-format and reconnection limits</h3>
+            <p><code>WireCodec</code> encodes events as standard SSE messages that can arrive incrementally. Products can reuse the output contract and connect their own service routing. <code>run.subscribe(from_cursor=...)</code> replays from the saved position and follows live output. cursor is a server-provided log position: save it rather than guessing from message counts.</p>
+            <p className="aside-note">There is currently no facade that hydrates a read-only Run from shared storage by <code>run_id</code>. Multi-worker products must locate the owning process or implement replay routing. Default SSE replay frames do not receive a new cursor, so a client that closes after receiving only replay still needs a product-defined cursor policy.</p>
           </div>
-          <p className="source-note">阅读：<a href="/docs/02-core-concepts">核心概念</a> · <a href="/docs/03-streaming-and-sse">流式事件与 SSE</a> · <a href="/docs/05-cancellation-and-suspension">取消与挂起</a> · <a href="/docs/06-recovery">重启恢复</a> · <a href="/docs/07-extending">扩展框架</a> · <a href="/docs/api_surface">公开 API 契约</a></p>
+          <p className="source-note">Read: <a href="/docs/02-core-concepts">Core concepts</a> · <a href="/docs/03-streaming-and-sse">Streaming and SSE</a> · <a href="/docs/05-cancellation-and-suspension">Cancellation and suspension</a> · <a href="/docs/06-recovery">Restart recovery</a> · <a href="/docs/07-extending">Extending the framework</a> · <a href="/docs/api_surface">Public API contract</a></p>
         </section>
 
         <section className="section docs-section" id="docs">
-          <SectionHeading number="10" label="阅读 / DOCUMENTATION" title="从一轮执行，读到产品边界。" />
-          <p className="section-intro">从快速开始到完整示例，按顺序理解框架的执行、存储与扩展边界。</p>
-          <a className="docs-index" href="/docs"><div><span className="small-label">阅读起点</span><strong>进入文档区</strong></div><span className="doc-open">开始阅读 →</span></a>
+          <SectionHeading number="10" label="DOCUMENTATION" title="From one run to product boundaries." />
+          <p className="section-intro">Follow the guides from quick start to integration to understand execution, storage, and extension boundaries.</p>
+          <a className="docs-index" href="/docs"><div><span className="small-label">Start here</span><strong>Explore the docs</strong></div><span className="doc-open">Start reading →</span></a>
         </section>
       </main>
       </div>
 
       <footer className="site-footer page-column">
-        <div className="footer-top"><a className="brand" href="#top">flops-agent</a><span>© 2026 Xenotech Studio · MIT License</span><a className="back-to-top" href="#top">回到顶部 ↑</a></div>
-        <p>框架代码以 MIT 许可证公开，PyPI 已发布 0.2.0，支持 Python ≥ 3.10。</p>
+        <div className="footer-top"><a className="brand" href="#top">flops-agent</a><span>© 2026 Xenotech Studio · MIT License</span><a className="back-to-top" href="#top">Back to top ↑</a></div>
+        <p>The framework is open source under MIT, with version 0.2.0 on PyPI and support for Python ≥ 3.10.</p>
       </footer>
     </>
   )

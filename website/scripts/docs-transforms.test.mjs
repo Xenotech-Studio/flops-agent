@@ -15,6 +15,6 @@ test('ignore fenced headings, stop at higher heading, support multiple selection
   assert.equal(dropSections(source, ['## Hidden', '## Last']), '# Doc\n```md\n## Hidden\n```\n# Keep\npublic\n');
 });
 test('fail closed on missing selector or invalid configuration', () => {
-  assert.throws(() => dropSections('# Title\n', ['## Missing']), /未找到/);
-  assert.throws(() => dropSections('# Title\n', '## Missing'), /数组/);
+  assert.throws(() => dropSections('# Title\n', ['## Missing']), /not found/);
+  assert.throws(() => dropSections('# Title\n', '## Missing'), /array/);
 });

@@ -46,7 +46,7 @@ export function renderMarkdown(source) {
         while (i < lines.length && (/^ {4}/.test(lines[i]) || !lines[i].trim())) code.push(lines[i++].replace(/^ {4}/, ''));
         while (code.at(-1) === '') code.pop();
       }
-      html += `<pre tabindex="0" aria-label="代码块，可横向滚动"><code>${escape(code.join('\n'))}</code></pre>`;
+      html += `<pre tabindex="0" aria-label="Code block; scroll horizontally"><code>${escape(code.join('\n'))}</code></pre>`;
       continue;
     }
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
@@ -60,7 +60,7 @@ export function renderMarkdown(source) {
     }
     if (line.includes('|') && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1] || '')) {
       const cells = row => row.trim().replace(/^\||\|$/g, '').split('|').map(s => s.trim());
-      html += '<div class="docs-table" tabindex="0" role="region" aria-label="表格，可横向滚动"><table><thead><tr>' + cells(line).map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>'; i += 2;
+      html += '<div class="docs-table" tabindex="0" role="region" aria-label="Table; scroll horizontally"><table><thead><tr>' + cells(line).map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>'; i += 2;
       while (i < lines.length && lines[i].includes('|')) html += '<tr>' + cells(lines[i++]).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
       html += '</tbody></table></div>'; continue;
     }

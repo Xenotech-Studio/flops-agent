@@ -2,7 +2,7 @@
 // equal or higher rank. Fenced examples cannot start or end a real section.
 export function dropSections(markdown, selectors = []) {
   if (!Array.isArray(selectors) || selectors.some(s => typeof s !== 'string' || !/^#{1,6} \S/.test(s))) {
-    throw new Error('drop_sections 必须是 Markdown 标题字符串数组');
+    throw new Error('drop_sections must be an array of Markdown heading strings');
   }
   if (!selectors.length) return markdown;
   const normalize = s => s.trim().replace(/\s+#+\s*$/, '');
@@ -33,7 +33,7 @@ export function dropSections(markdown, selectors = []) {
     }
     if (!droppedLevel) output.push(line);
   }
-  for (const selector of wanted) if (!found.has(selector)) throw new Error(`未找到待剔除标题：${selector}`);
+  for (const selector of wanted) if (!found.has(selector)) throw new Error(`Section to remove was not found: ${selector}`);
   // Changelog reference definitions often live outside their section at EOF.
   // Remove those attached to excluded headings too, including compare URLs.
   return output.filter(line => {

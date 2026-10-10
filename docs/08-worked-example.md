@@ -1,76 +1,52 @@
-# 8. Worked Example
+# Integrate the example into your product
 
-Every previous article refers to the same small product. Its source is in
-[sample_product/](sample_product/). Read it through this page rather than guessing
-from file names.
+**Reader question:** The example runs. What is still missing before I can connect a browser to my product?
 
-## Run it first
+**Prerequisites:** Complete [streaming subscriptions](03-streaming-and-sse.md), [conversation storage](04-sessions-and-persistence.md), and [the tool walkthrough](07-extending.md). **Outcome:** Complete product boundaries along a request path and validate observable scenarios rather than just copying example files.
 
-From the repository root:
+## Start with the working example
 
-    python docs/sample_product/server.py
-    python docs/sample_product/local_executor.py
+Run the offline command from [the five-minute guide](01-quick-start.md) again. This time, read the code with one question in mind: where does each input, tool result, and SSE frame cross a product boundary?
 
-The first command uses deterministic ScriptedLLM by default, so it needs no
-network or API key. Set the documented placeholder environment variable and
-replace the sample endpoint values to demonstrate a real model call.
-The second command is a self-contained executor demonstration. frontend.html is
-a minimal browser reference for consuming SSE, saving a cursor, reconnecting, and
-a cancel button; it should not import the Python server.
+| Example location | What it demonstrates | What your product still implements |
+|---|---|---|
+| build_runtime in server.py | Assembling model, tools, storage, and Runner | Real model and persistent backend configuration |
+| handle_chat_request | Loading Session, creating Query, starting Run, yielding SSE | HTTP routes, identity, and conversation access checks |
+| ExecutorAdapter | Simulated incremental output | Real tool execution, authorization, and remote task correlation |
+| handle_cancel | Requesting a stop by session | The product stop endpoint and ownership checks |
+| on_startup | Where to call recover | Actual reconstruction inside resume |
 
-The sample has three roles, not a complete web application bound to ports:
-server.py is an in-process server demo, local_executor.py is an executor demo, and
-the HTML assumes the product has implemented /chat and /cancel. A real three-process
-HTTP/WebSocket deployment adds product-owned transport and authentication.
+`docs/sample_product/local_executor.py` and `frontend.html` illustrate the other two sides of the integration. Running server.py does not automatically connect all three into a network service. The sample command inspection is also only a demonstration, not a complete security guarantee.
 
-## Map the concepts to code
+## Try it: complete the request path
 
-build_runtime() in server.py is the assembly point from Articles 1 and 2. It
-chooses the LLM, InMemoryDatabase, InMemoryRunStore, tool schemas, executor, and
-SampleRunner. A real product replaces deployment facts there.
+1. Assemble and retain Runtime at product startup. Use ScriptedLLM first to make the network integration reproducible, then switch to a real model.
+2. Implement a submission endpoint in your Web framework: authenticate the user, obtain an authorized Session, construct Query, return run_id, and send SSE.
+3. Save the server cursor in the client and reconnect by run_id. Route requests to a location that can provide the run or its persistent log.
+4. Implement an explicit stop endpoint and propagate stop intent into the real executor. Do not equate disconnection with cancellation.
+5. Inject Database and RunStore and verify persistence capabilities individually. Promise restart continuation only after completing [the recovery exercise](06-recovery.md).
 
-handle_chat_request() has the endpoint shape from Article 3: load a Session,
-translate HTTP input into Query, call runtime.start(), then iterate
-runtime.sse_stream(run). The endpoint contains no agent loop; closing its
-connection does not affect the run.
+These steps do not prescribe a Web framework or invent an existing serve API. Keep your product's HTTP layer and connect run handles to streaming responses.
 
-The demo does not implement reconnect by old run_id: handle_chat_request() always
-starts a new run, while frontend.html only shows how a browser saves live cursors.
-That is deliberate. Adding reconnection requires run authorization, finding a live
-run in the right worker or shared routing, and the replay cursor strategy from
-Article 3.
+## Check the result
 
-SampleRunner.before_tool() is the Article 7 policy extension. It rejects dangerous
-commands before ToolExecuting. The rejection returns to the model as a tool result;
-it is not an after-the-fact executor check.
+| Scenario | What you should observe |
+|---|---|
+| Consecutive questions in one conversation | The second turn loads the first turn's history |
+| A tool call | Incremental output is visible and the final result enters history |
+| Closing the browser and reconnecting | Execution does not stop on disconnect; the protocol determines replay position |
+| Clicking stop | The run eventually reaches stopped and the executor receives cancellation intent |
+| Another user requests the same run | Product authorization rejects access instead of trusting run_id alone |
+| A process restart | Persisted history remains; recovery success or failure has an observable terminal state |
 
-ExecutorAdapter is the server-side ToolExecutor seam. To keep one file runnable it
-simulates execution and emits output through ctx.stream_sink. Its comments identify
-the only location to replace with WebSocket forwarding. local_executor.py shows the
-run_tool, tool_delta, and cancel_tool messages an executor should understand, but
-does not open a real socket to server.py.
+Turn these scenarios into your product's integration tests before expanding tools, memory, or multi-process routing. One successful example run does not replace these checks.
 
-NotebookMemory and Agent(...) demonstrate identity and memory: reads become system
-prompt input; writes are scheduled after completion.
+## Next steps
 
-on_startup() intentionally keeps an empty resume hook. Key acquisition and the
-entry point used to restart a run are deployment facts; follow Article 6 to supply
-your own implementation.
+Learn now covers the complete path: run, integrate, preserve state, extend, and verify. Look up methods in the [API contract](api_surface.md), diagnose behavior in [errors and limits](errors-and-limits.md), and check [released changes](CHANGELOG.md) before upgrading.
 
-## Use it as a starting point
+## Code evidence
 
-Copy the assembly shape in build_runtime() and the endpoint shape in
-handle_chat_request(), then replace one concern at a time: memory database with
-your Database, memory RunStore with a shared RunStore, inline executor with a
-remote ToolExecutor, and ScriptedLLM with your LLMStreamClient. Preserve the
-start-to-subscribe/SSE lifecycle as each replacement is made.
-
-Do not copy InMemoryDatabase, InMemoryRunStore, or the small SafetyInspector into
-production unchanged. They prove protocol semantics, run lifecycle, and the gate
-location; production storage, authorization, audit rules, and HTTP/WebSocket
-transport remain product responsibilities.
-
-tests/test_sample_product.py is the regression test that keeps the example aligned
-with the public API.
-
-Back to the [documentation index](README.md).
+- `docs/sample_product/server.py:172`: build_runtime; `:187`: request handler; `:200`: stopping; `:208`: recovery placeholder.
+- `docs/sample_product/server.py:69`: a simulated executor, not a real command execution service.
+- `src/flops_agent/engine/runtime.py:1041`, `:1154`: execution and recovery entry points.

@@ -1,33 +1,16 @@
 [
   {
-    "id": "framework",
-    "title": "文档概览",
-    "order": 0,
-    "kind": "use",
-    "navigation": false
-  },
-  {
-    "id": "quick-start",
-    "title": "快速开始",
+    "id": "learn",
+    "title": "Learn",
     "order": 10,
-    "kind": "use"
+    "kind": "use",
+    "navigation": true
   },
   {
-    "id": "guide",
-    "title": "指南",
+    "id": "reference",
+    "title": "Reference",
     "order": 20,
-    "kind": "use"
-  },
-  {
-    "id": "api",
-    "title": "API 契约",
-    "order": 30,
-    "kind": "contract"
-  },
-  {
-    "id": "changelog",
-    "title": "更新内容",
-    "order": 40,
-    "kind": "use"
+    "kind": "contract",
+    "navigation": true
   }
 ]

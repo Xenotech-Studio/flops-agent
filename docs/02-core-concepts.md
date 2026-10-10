@@ -1,88 +1,69 @@
-# 2. Core Concepts: Why Run, Session, Runner, and Runtime Exist
+# Understand how a task runs
 
-A program that sends a prompt to a model has input and output. A service agent has two independent lifetimes: whether work continues, and whether a particular client is watching. If both live in one generator, closing a browser stops work and a refresh has no reliable place to resume.
+**Reader question:** Which objects handled the example, and where should I send the next message?
 
-\`flops_agent\` separates them. A runner drives work; a run lets any number of clients observe it.
+**Prerequisites:** Complete [the five-minute guide](01-quick-start.md). **Outcome:** Explain the execution timeline and complete two turns in the same conversation.
 
-\`\`\`text
-request -> Query ---+
-stored history -> Session ---+-> Runner (one turn's state machine)
-agent identity -> Agent ---+                              |
-                                                           v
-Runtime assembles the pieces at startup -> Run (events and state) -> SSE/subscribers
-                                                           |
-                                                  Database / RunStore
-\`\`\`
+## Start with four objects
 
-## Six names to remember
-
-\`Runtime\` is the long-lived assembly object. It knows the model client, tools, database, executor, and runner class. It does not hold a user's current input or temporary UI state.
-
-\`Session\` is a conversation's history and metadata. It can be loaded, saved, truncated, or continued. Regeneration is not a special flag: edit the session, then continue it with an empty \`Query\`.
-
-\`Query\` is the new contribution to this conversation. \`Query.text("...")\` is a user message; \`Query.answer(...)\` answers a suspended question; \`Query.event(...)\` advances a turn from an external event. Pass \`None\` when there is no new contribution and the existing session state determines whether to continue or regenerate.
-
-\`Run\` is the handle for work in progress. It has an id, state, event log, and \`stop()\` method. It is not a generator waiting to be iterated. A runner advances it in a background task, while subscribers may arrive late, leave, or coexist.
-
-\`Runner\` is a state machine created for one run. The default runner calls the LLM, assembles and executes tools, persists history, and finishes. Products subclass it only when they need a policy change.
-
-\`Agent\` describes who the assistant is: persona, model preference, and memory. One database, model client, and executor can serve several agents. \`Event\` is the typed vocabulary through which the framework speaks to the outside world.
-
-Their distinct lifetimes are the reason they are separate objects:
-
-| Object | Typical lifetime | What does not belong there |
+| Object | The question it answers | Lifetime |
 |---|---|---|
-| \`Runtime\` | Process or application instance | A user's current input or UI state |
-| \`Agent\` | Lifetime of a persona configuration | Database connections or mutable conversation history |
-| \`Session\` | Persisted across requests and processes | Background tasks or HTTP connections |
-| \`Query\` | One entry call | Existing history or a reconnection cursor |
-| \`Run\` / \`Runner\` | One execution | Long-term truth for the next turn |
+| Runtime | Which model, tools, and storage should do the work? | Usually assembled at product startup |
+| Session | What has this conversation said so far? | Spans multiple runs; can be loaded from Database |
+| Query | What new input does this turn contribute? | One user input, answer, or external event |
+| Run | How far has this turn progressed, and how do I subscribe or stop it? | One execution, with its own id, state, and log |
 
-A \`Runtime\` accepts one \`agent\` at construction. If a product selects a persona per request, it must choose the agent first and explicitly derive a runtime with \`runtime.with_overrides(agent=chosen_agent)\`, or assemble a runtime for that persona. \`with_overrides()\` preserves every other Runtime configuration slot, including persistence, inbox, wire, retry, and lifecycle-hook settings. Do not put the current agent in a global variable or a temporary session field.
+Session is a conversation, not the currently executing task. Run is a task, not a browser connection. A Run can have multiple subscribers or temporarily have none.
 
-## The smallest service lifecycle
+## Follow the execution timeline
 
-\`\`\`python
-session = await runtime.load_session("conv-42", owner_id="u-7")
-run = runtime.start(session, Query.text("Look up the weather in Shanghai."))
+1. The product obtains a Session and constructs a Query from new input.
+2. `runtime.start(session, query)` immediately returns a Run and starts work in the background.
+3. Runner combines history and tool descriptions into a model request.
+4. The model emits text or tool calls. Tool results enter history, and the model is called again if needed.
+5. Run delivers events to subscribers and eventually completes, stops, fails, or suspends.
 
-# The HTTP/SSE layer observes; it does not drive execution.
-async for delivery in run.subscribe():
-    send_to_client(delivery)
-\`\`\`
+Runner executes the flow. Agent optionally supplies identity, instructions, and memory. You do not need to subclass Runner or configure Agent for your first integration.
 
-\`start()\` creates a background task and returns immediately. The runner completes model and tool work even with no subscriber. If this subscriber disconnects, another may attach to the same \`Run\`.
+## Try it: two turns in one conversation
 
-Only one local Run may be active for a session. Starting another raises
-\`SessionRunActiveError\`, whose \`run_id\` identifies the existing Run; products
-that need per-session queuing should catch it and schedule their own retry.
+Save the following as `two_turns.py` at the repository root and run `python two_turns.py` in your existing virtual environment. This still uses the repository's deterministic model. The second response is scripted; it does not demonstrate that a real model understood the history.
 
-\`Query\` expresses only what is new:
+```python
+import asyncio
+from docs.sample_product.server import ScriptedLLM
+from flops_agent import Runtime, InMemoryDatabase, Query
 
-\`\`\`python
-runtime.start(session, Query.text("A new question"))
-runtime.start(session, Query.answer({"approved": True}))
-runtime.start(session, Query.event({"kind": "job_finished"}))
-runtime.start(session)  # Continue or regenerate from existing history.
-\`\`\`
+async def main():
+    runtime = Runtime(
+        llm=ScriptedLLM([
+            {"content": "I have recorded your name."},
+            {"content": "Hello, Ming."},
+        ]),
+        database=InMemoryDatabase(),
+    )
+    for text in ["My name is Ming", "Please use my name"]:
+        session = await runtime.load_session("demo", owner_id="local-user")
+        run = runtime.start(session, Query.text(text))
+        async for delivery in run.subscribe():
+            print(delivery.event)
+        print("Status:", (await run.wait()).value)
+    session = await runtime.load_session("demo", owner_id="local-user")
+    print("History roles:", [m["role"] for m in session.messages])
 
-The final call is intentional. To regenerate, first change \`Session\` (for example, remove the previous answer), then start with no new query. The framework derives placement from history rather than a \`regenerate=True\` flag that could drift from the real state.
+asyncio.run(main())
+```
 
-## How one run advances
+## Check the result
 
-The default runner roughly does four things per step:
+Both runs should end in `done`. The history roles should include two pairs of `user` and `assistant`. This checks continuity of history in the same conversation, not generation quality. Do not start a second Run while the same Session already has an active one. Wait for completion or use [queued input](05-cancellation-and-suspension.md).
 
-1. Build an LLM request from the session, query, agent, and visible tools.
-2. Consume model chunks and immediately emit \`TextDelta\`, tool-call deltas, and related events.
-3. Persist complete text or tool calls; if tools are requested, execute them and persist their results.
-4. Emit \`LoopFinished\` when no more work remains, otherwise let the model inspect tool results in another step.
+## Next steps
 
-A model call is therefore one step, not necessarily one run. A run can contain multiple model steps and multiple tool calls.
+If you have a real model, read [model integration](connect-model.md). To connect a browser, read [subscriptions and reconnection](03-streaming-and-sse.md). Use the [glossary](glossary.md) when you need a reminder of a term.
 
-## Who owns each layer
+## Code evidence
 
-The framework owns general lifecycle mechanics: background execution and subscriptions, events, session writes, cancellation checkpoints, suspension and resume orchestration, reconnect logs, and standard SSE. Products provide deployment facts: a model vendor, database, remote executor, authentication, HTTP routes, tool copy, and safety policy.
-
-A useful test is: would a third party building an independent agent still need a browser disconnect not to stop a long-running tool? That belongs in the framework. Membership permissions belong in the product.
-
-Next: [Streaming and SSE](03-streaming-and-sse.md).
+- `src/flops_agent/engine/runtime.py:961`, `:1041`: loading a Session and starting a Run.
+- `src/flops_agent/engine/runner.py:315`: model and tool steps; `src/flops_agent/engine/execution.py:62`: the state set.
+- `src/flops_agent/entities/query.py:37`: Query; `src/flops_agent/entities/agent.py:39`: Agent.

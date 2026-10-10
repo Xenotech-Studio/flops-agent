@@ -80,3 +80,6 @@
 .docs-area-inner a:focus-visible { outline-offset: -3px; }
 @media (max-width: 760px) { .docs-area-inner { gap: 24px; } }
 @media print { .docs-area-bar { display: none; } }
+
+/* Legacy heading links retain a scroll target without adding layout height. */
+.docs-heading-alias { display: block; height: 0; scroll-margin-top: 140px; }

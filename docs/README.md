@@ -1,50 +1,53 @@
-# flops_agent documentation
+# Decide whether the framework fits your task
 
-flops_agent is for people building agents that run as services. It is more than
-“call a model and yield text”: browser refreshes, a second device, long-running
-tools, cancellation, and process restarts are ordinary paths.
+You have a Python product and want a model to complete a task: accept input, call tools, stream output, and maintain clear state when a user stops work or a connection drops. flops-agent provides the runtime kernel for that process. You still choose the model, product interfaces, and storage backends.
 
-This is a short course, not an API index. Run a deterministic example first, then
-learn the objects and add network, storage, and deployment concerns one layer at a
-time. By Article 8, you should be able to distinguish lifecycle mechanics owned by
-the framework from HTTP, authentication, storage, and business policy owned by
-the product.
+**Reader question:** Which part of my product should this framework handle, and where should I start?
 
-Read in this order. Each article depends only on earlier ones and continues with
-the same sample_product.
+**Prerequisites:** You can run Python; no prior knowledge of agent terminology is required. **Outcome:** Distinguish framework responsibilities from product responsibilities and choose a learning path you can complete.
 
-1. [Quick start: run an agent in five minutes](01-quick-start.md) — install, start, and subscribe to a first turn.
-2. [Core concepts](02-core-concepts.md) — build the mental model for Run, Session, Runner, and Runtime.
-3. [Streaming and SSE](03-streaming-and-sse.md) — events, cursors, reconnection, and standard wire format.
-4. [Sessions and persistence](04-sessions-and-persistence.md) — Database, fine-grained writes, and RunStore.
-5. [Cancellation and suspension](05-cancellation-and-suspension.md) — stopping work, human input, and input during a turn.
-6. [Restart recovery](06-recovery.md) — shutdown, recovery orchestration, and product hooks.
-7. [Extending the framework](07-extending.md) — where product policy belongs.
-8. [Worked example](08-worked-example.md) — map the course to three independently understandable product roles.
+## Establish the boundaries
 
-Follow the next link at each article's end on a first read. For a public name,
-treat the package [__init__.py](../src/flops_agent/__init__.py) as the contract and relevant tests
-as executable examples. Do not use this series as an encyclopedia.
+| What you need | What the framework provides | What you supply |
+|---|---|---|
+| Complete a model-and-tool interaction | Runtime, Runner, and tool dispatch | A model client and tool business logic |
+| Deliver results incrementally to a browser | Events, subscriptions, SSE encoding, and replay cursors | HTTP routes, authentication, and client rendering |
+| Continue a conversation on the next request | Session and the Database protocol | A persistent backend and user isolation policy |
+| Stop, wait for an answer, or recover after restart | Run state, interactions, and recovery orchestration | Product entry points, recovery context, and tool idempotency |
 
-For the full inventory behind that contract — every symbol a known embedding
-product uses, why it is or isn't exported, and what's flagged as product-shaped
-and not framework material — see [api_surface.md](api_surface.md).
+This is not a hosted chat product you can deploy and sign into. The repository example is not an HTTP service listening on a port either. Start with the offline example, which needs no model account, then replace the product boundaries. That is easier than debugging networking, authentication, and execution at the same time.
 
-For active framework work, read only [TODO.md](TODO.md). It is the sole todo
-source; this series does not duplicate it.
+## The basics
 
-Release notes are maintained in [CHANGELOG.md](CHANGELOG.md).
+1. [Run a task in five minutes](01-quick-start.md): execute a deterministic example and observe tool results and memory output.
+2. [Understand how a task runs](02-core-concepts.md): work backward from that output to Runtime, Session, Query, and Run.
 
-## Scope of this guide
+If you have not run the example yet, do only the first step now. The remaining chapters can wait until you have a successful run.
 
-“Framework” here means flops_agent. The embedding application is the product
-layer. Ask whether a third party building an independent agent also needs a feature:
-general runtime mechanics belong in the framework; HTTP routes, accounts, tool
-catalogs, provider choice, and safety thresholds are product policy.
+## Build a service
 
-The former ARCHITECTURE.md and RECOVERY.md material is now part of this path:
-concepts and boundaries are in Articles 2, 4, and 7; the recovery recipe is in
-Article 6. Example code remains in [sample_product/](sample_product/), with tests.
-It demonstrates the three role boundaries: server and executor run independently,
-while the HTML is a client reference for real product endpoints rather than a
-ready-made web service.
+- [Connect your own model](connect-model.md): replace the offline model and check the first output from a real endpoint.
+- [Keep receiving results after a disconnect](03-streaming-and-sse.md): separate tasks from connections and reconnect with server cursors.
+- [Stop work and accept user input](05-cancellation-and-suspension.md): choose different actions for stop buttons, confirmation cards, and additional messages.
+
+## Save and recover
+
+- [Save a conversation and continue it](04-sessions-and-persistence.md): distinguish conversation history from run logs before connecting storage.
+- [Recover tasks after a process restart](06-recovery.md): reconstruct tasks from persisted data and verify that side effects are not duplicated.
+- [Control model input in long conversations](context-window.md): preserve complete history while constructing a bounded view for the model.
+
+## Extend and integrate
+
+- [Give your agent a tool](07-extending.md): start with an ordinary function and verify that its result reaches the next model request.
+- [Put product policy at the right extension point](customize-runner.md): choose Runner, Memory, or Executor rather than copying the loop.
+- [Integrate the example into your product](08-worked-example.md): complete the request, subscription, authorization, storage, and stop paths one at a time.
+
+## Next steps
+
+For your first run, start with [the five-minute guide](01-quick-start.md). If you already know what you need to look up, switch to [Reference](reference.md). These docs use released v0.2.0 capabilities as their baseline; the [changelog](CHANGELOG.md) lists released versions only.
+
+## Code evidence
+
+- `src/flops_agent/engine/runtime.py:147`: product-supplied model, storage, executor, and runner.
+- `src/flops_agent/engine/runtime.py:1041`: an execution entry point independent of subscriptions.
+- `docs/sample_product/server.py:1`: the example explicitly describes itself as integration reference code, not a production HTTP service.

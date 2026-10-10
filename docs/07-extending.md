@@ -1,108 +1,63 @@
-# 7. Extend the Framework: Tools, Runners, Memory, and Executors
+# Give your agent a tool
 
-Begin with the default Runtime. Replace a seam or override a clear Runner method
-only when your product has a genuinely different policy or deployment boundary.
-The general run lifecycle then stays in the framework instead of being rebuilt in
-product code.
+**Reader question:** How do I let the model call my function and verify that the result reaches the next request?
 
-## Ordinary tools: minimal code
+**Prerequisites:** Run [the basic two-turn example](02-core-concepts.md). **Outcome:** Register a tool, execute a deterministic call, and inspect its result in history.
 
-Pass an ordinary function:
+## Try it
 
-    from flops_agent import Runtime
+Save this as `tool_check.py` at the repository root and run `python tool_check.py`. A scripted model separates the question of whether a model chooses to call a tool from whether the tool is wired correctly.
 
-    async def get_weather(city: str) -> dict:
-        return {"city": city, "forecast": "sunny"}
+```python
+import asyncio
+from docs.sample_product.server import ScriptedLLM
+from flops_agent import Runtime, Session, Query, ToolResult
 
-    runtime = Runtime(llm=my_llm, tools=[get_weather])
+async def get_weather(city: str) -> dict:
+    """Return sample weather without contacting a real weather service."""
+    return {"city": city, "forecast": "sunny"}
 
-The framework derives a schema from the signature, invokes the function through
-the default ToolExecutor, emits ToolResult, and stores the result in the session.
-For complete schema control, pass an OpenAI-style schema or
-{"schema": schema, "fn": handler}.
+async def main():
+    llm = ScriptedLLM([
+        {"tool_calls": [{"id": "weather-1", "name": "get_weather",
+                         "arguments": {"city": "London"}}]},
+        {"content": "The sample weather is sunny."},
+    ])
+    runtime = Runtime(llm=llm, tools=[get_weather])
+    session = Session("tool-demo")
+    run = runtime.start(session, Query.text("What is the weather in London?"))
+    async for delivery in run.subscribe():
+        if isinstance(delivery.event, ToolResult):
+            print("Tool result:", delivery.event.result)
+    print("History roles:", [m["role"] for m in session.messages])
+    assert any(m["role"] == "tool" for m in session.messages)
+    assert (await run.wait()).value == "done"
 
-## Runner: where product policy belongs
+asyncio.run(main())
+```
 
-Subclass Runner instead of copying its loop. A common safety gate overrides
-before_tool():
+## Check the result
 
-    from typing import Any
-    from flops_agent import Runner, ToolGate
+You should see a result containing city and forecast, and history roles `user -> assistant -> tool -> assistant`. This verifies registration, dispatch, and history writeback. The scripted final sentence does not prove that a model understands arbitrary tool results. After switching to a real model, separately verify that it can choose the tool and use its result.
 
-    class SafeRunner(Runner):
-        async def before_tool(self, call: Any) -> ToolGate:
-            if call.function.name == "run_command" and "rm -rf" in call.function.arguments:
-                return ToolGate.deny({"error": "Human approval is required."})
-            return ToolGate.proceed()
+## Define the argument boundary
 
-    runtime = Runtime(llm=my_llm, tools=[run_command], runner=SafeRunner)
+Ordinary function schemas are derived from the signature, but the current minimal implementation declares parameters as strings. **It does not fully infer Python type annotations.** For numbers, enums, nested objects, or stricter constraints, pass `{"schema": schema, "fn": handler}` with an explicit OpenAI-style tool description.
 
-deny() does not run the tool, but returns a result to the model so it can choose
-another route. rewrite() runs a changed call; suspend() suspends the current turn.
-Other useful overrides are build_system_prompt() for persona and memory,
-visible_tools() for the current tool projection, prepare_dispatch() to adjust
-calls requested by the model, and after_execute() for post-tool interaction
-policy.
+A schema alone does not implement a tool. You also need a handler or executor route. Validate model-generated arguments inside your business handler; a schema does not replace user permissions or business authorization.
 
-When a step must not request the model at all, such as resuming a known tool call,
-override plan_step() and return StepPlan.dispatch(calls). Return
-StepPlan.finish(reason) to end immediately. Do not invent tools in
-prepare_dispatch(); it only runs when the model already asked for a call.
+## When to extend further
 
-## Agent and memory
+If all you need is one function, stop here. For tool gates, identity and memory, or remote execution, read [Put product policy at the right extension point](customize-runner.md). The Runner, Memory, and Executor material formerly on this page is expanded there. Projection and summarization are consolidated in [Control model input](context-window.md).
 
-Agent is the assistant's identity, not infrastructure. Give Runtime an agent with
-instructions, a model preference, and Memory:
+ToolRegistry can manage tool packages, visibility, and execution routes. Introduce packages and capability filtering only after identifying a need that a flat tool list cannot meet. See the [API contract](api_surface.md).
 
-    from flops_agent import Agent, Runtime
+## Next steps
 
-    class Notes:
-        async def recall(self, session, *, query=None) -> str:
-            return "The user prefers concise answers."
+Add one refusal condition and verify that a denial returns to the model without executing the tool. Follow [the product-policy article](customize-runner.md) to complete that exercise.
 
-        async def remember(self, session) -> None:
-            save_summary_somewhere(session)
+## Code evidence
 
-    agent = Agent(name="Assistant", instructions="Answer concisely.", memory=Notes())
-    runtime = Runtime(llm=my_llm, agent=agent)
-
-The framework calls recall() while building a request, then schedules remember()
-after the run finishes. Memory maintenance cannot delay a response the user has
-already seen. Storage, recall strategy, encryption, and retention are product
-policy.
-
-## Context compaction: project first, then write summaries
-
-Long conversations cannot send every record to a model forever, but saving tokens
-must not destroy factual history. Overriding Runner.project_messages() creates a
-read-time projection: a temporary list for one request. To generate summaries,
-use flops_agent.engine.compaction CompactionPolicy to plan coverage and write
-CompactionRecord values into a product CompactionStore.
-
-This is not a Runtime(compaction=True) switch. The product must provide model
-window size, summary-model routing, CompactionStore, and the point at which a
-summary may be written. The framework provides CJK-aware estimation, a recent
-message floor, tool-call boundary alignment, quality checks, and planning. Keep
-Session.messages as the auditable source of truth.
-
-## Remote executors
-
-For tools that run elsewhere, inject a ToolExecutor implementing
-async execute(call, ctx). It may forward work over HTTP or WebSocket and use
-ctx.stream_sink({"op": "append", ...}) for incremental output; the framework
-converts it to ToolResultDelta. On stop, use a Run on_stop() callback to cancel
-the remote task. On recovery, use ctx.record_dispatch() and ctx.resume_of to
-avoid duplicate dispatch.
-
-ToolContext includes run_id, tool_call_id, runtime, and session. A remote adapter
-can record its task id and register a cancellation callback after confirming the
-run remains local. Do not put WebSockets, device discovery, authentication tokens,
-or product account objects into framework entities. Keep them in the executor
-adapter or in product context passed to Runtime.start(...).
-
-Tool catalogs, packages, capability filtering, and executor routes can live in
-ToolRegistry. The next article maps these seams to the worked example. The
-framework defines calls and lifecycle, not transport, device discovery, or account
-authorization.
-
-Next: [Worked example](08-worked-example.md).
+- `src/flops_agent/tools/schema.py:17`, `:42`: accepted tool forms and string-parameter inference.
+- `src/flops_agent/engine/runtime.py:173`: flat tools are registered in the default package.
+- `src/flops_agent/engine/runner.py:523`: tool execution, interaction, and result writeback.

@@ -2,72 +2,292 @@
   {
     "file": "README.md",
     "slug": "overview",
-    "group": "阅读起点",
-    "section": "framework",
-    "overview": true
+    "group": "The basics",
+    "section": "learn",
+    "overview": true,
+    "lang": "en",
+    "heading_aliases": {
+      "docs-入门": "The basics",
+      "docs-核心机制": "Build a service",
+      "docs-扩展与参考": "Extend and integrate",
+      "docs-阅读边界": "Establish the boundaries",
+      "docs-先判断边界": "Establish the boundaries",
+      "docs-the-basics-基础入门": "The basics",
+      "docs-运行服务": "Build a service",
+      "docs-保存与恢复": "Save and recover",
+      "docs-扩展与实战": "Extend and integrate",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "01-quick-start.md",
     "slug": "01-quick-start",
-    "group": "入门",
-    "section": "quick-start"
+    "group": "The basics",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-run-the-offline-example": "Try it",
+      "docs-install-and-call-a-real-model": "Next steps",
+      "docs-turn-the-script-into-a-service": "Next steps",
+      "docs-the-first-common-mistake": "Boundaries",
+      "docs-动手": "Try it",
+      "docs-检查结果": "Check the result",
+      "docs-边界": "Boundaries",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "02-core-concepts.md",
     "slug": "02-core-concepts",
-    "group": "入门",
-    "section": "guide"
+    "group": "The basics",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-six-names-to-remember": "Start with four objects",
+      "docs-the-smallest-service-lifecycle": "Try it: two turns in one conversation",
+      "docs-how-one-run-advances": "Follow the execution timeline",
+      "docs-who-owns-each-layer": "Start with four objects",
+      "docs-先记住四个对象": "Start with four objects",
+      "docs-沿时间线看一次运行": "Follow the execution timeline",
+      "docs-动手同一会话的两轮输入": "Try it: two turns in one conversation",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
+  },
+  {
+    "file": "connect-model.md",
+    "slug": "connect-model",
+    "group": "Build a service",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-准备配置": "Prepare the configuration",
+      "docs-动手": "Try it",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "03-streaming-and-sse.md",
     "slug": "03-streaming-and-sse",
-    "group": "核心机制",
-    "section": "guide"
-  },
-  {
-    "file": "04-sessions-and-persistence.md",
-    "slug": "04-sessions-and-persistence",
-    "group": "核心机制",
-    "section": "guide"
+    "group": "Build a service",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-events-handle-meaning-before-bytes": "First connection: start, then subscribe",
+      "docs-standard-sse-the-endpoint-is-a-small-bridge": "First connection: start, then subscribe",
+      "docs-replay-and-live-delivery": "Check the result",
+      "docs-change-the-wire-at-the-codec-boundary": "Boundaries",
+      "docs-首次连接先启动再订阅": "First connection: start, then subscribe",
+      "docs-断线重连使用服务器给出的-cursor": "Reconnect with the server's cursor",
+      "docs-检查结果": "Check the result",
+      "docs-边界": "Boundaries",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "05-cancellation-and-suspension.md",
     "slug": "05-cancellation-and-suspension",
-    "group": "核心机制",
-    "section": "guide"
+    "group": "Build a service",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-cancellation-stops-a-run-it-does-not-close-sse": "Try it: stop a run",
+      "docs-suspend-when-a-person-must-decide": "Try it: answer a suspended interaction",
+      "docs-accept-input-while-a-run-is-active": "Try it: queue additional input",
+      "docs-先选动作": "Choose the action first",
+      "docs-动手停止运行": "Try it: stop a run",
+      "docs-动手回答挂起的交互": "Try it: answer a suspended interaction",
+      "docs-动手排队接收补充输入": "Try it: queue additional input",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
+  },
+  {
+    "file": "04-sessions-and-persistence.md",
+    "slug": "04-sessions-and-persistence",
+    "group": "Save and recover",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-database-stores-a-session": "Replace memory with persistent storage",
+      "docs-runstore-stores-a-run": "Replace memory with persistent storage",
+      "docs-edit-a-session-safely": "Editing and long conversations",
+      "docs-projection-and-compaction-are-different": "Editing and long conversations",
+      "docs-先分清存什么": "Decide what you are storing",
+      "docs-动手继续同一会话": "Try it: continue the same conversation",
+      "docs-换成可持久化的实现": "Replace memory with persistent storage",
+      "docs-编辑与长对话": "Editing and long conversations",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "06-recovery.md",
     "slug": "06-recovery",
-    "group": "核心机制",
-    "section": "guide"
+    "group": "Save and recover",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-mark-interruption-on-shutdown": "Meet the recovery prerequisites",
+      "docs-let-runtime-orchestrate-startup-recovery": "Try it: rebuild the execution entry point",
+      "docs-a-tool-that-was-running-halfway-through": "Handle a partially executed tool",
+      "docs-先满足恢复前提": "Meet the recovery prerequisites",
+      "docs-动手重建运行入口": "Try it: rebuild the execution entry point",
+      "docs-处理执行到一半的工具": "Handle a partially executed tool",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
+  },
+  {
+    "file": "context-window.md",
+    "slug": "context-window",
+    "group": "Save and recover",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-先选策略": "Choose a strategy first",
+      "docs-动手先实现可重复的投影": "Try it: make projection reproducible",
+      "docs-需要摘要时再补齐存储链路": "Add the storage path when you need summaries",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "07-extending.md",
     "slug": "07-extending",
-    "group": "扩展与参考",
-    "section": "guide"
+    "group": "Extend and integrate",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-ordinary-tools-minimal-code": "Try it",
+      "docs-runner-where-product-policy-belongs": "When to extend further",
+      "docs-agent-and-memory": "When to extend further",
+      "docs-context-compaction-project-first-then-write-summaries": "When to extend further",
+      "docs-remote-executors": "When to extend further",
+      "docs-动手": "Try it",
+      "docs-检查结果": "Check the result",
+      "docs-明确参数边界": "Define the argument boundary",
+      "docs-什么时候继续扩展": "When to extend further",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
+  },
+  {
+    "file": "customize-runner.md",
+    "slug": "customize-runner",
+    "group": "Extend and integrate",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-先选最小的扩展点": "Choose the smallest extension point",
+      "docs-动手添加一个工具门禁": "Try it: add a tool gate",
+      "docs-检查结果": "Check the result",
+      "docs-加入记忆或远端执行": "Add memory or remote execution",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "08-worked-example.md",
     "slug": "08-worked-example",
-    "group": "扩展与参考",
-    "section": "guide"
+    "group": "Extend and integrate",
+    "section": "learn",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-run-it-first": "Start with the working example",
+      "docs-map-the-concepts-to-code": "Start with the working example",
+      "docs-use-it-as-a-starting-point": "Try it: complete the request path",
+      "docs-从已运行的示例出发": "Start with the working example",
+      "docs-动手按请求链路补齐": "Try it: complete the request path",
+      "docs-检查结果": "Check the result",
+      "docs-下一步": "Next steps",
+      "docs-代码依据": "Code evidence"
+    }
+  },
+  {
+    "file": "reference.md",
+    "slug": "reference",
+    "group": "Start here",
+    "section": "reference",
+    "lang": "en",
+    "overview": true,
+    "heading_aliases": {
+      "docs-按问题查阅": "Look up a question",
+      "docs-版本边界": "Version boundaries",
+      "docs-给-agent-的入口": "Entry points for agents",
+      "docs-代码依据": "Code evidence"
+    }
   },
   {
     "file": "api_surface.md",
     "slug": "api_surface",
-    "group": "扩展与参考",
-    "section": "api"
+    "group": "Contracts and limits",
+    "section": "reference",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-runtime-and-lifecycle": "Runtime and session operations",
+      "docs-events-and-wire-format": "Subscriptions, events, and wire format",
+      "docs-typed-extension-seams": "Storage and extension protocols",
+      "docs-tools": "Tools and policy",
+      "docs-crypto": "Cryptography and authorization boundaries",
+      "docs-compatibility": "Versions and next steps",
+      "docs-运行与会话": "Runtime and session operations",
+      "docs-订阅事件与线格式": "Subscriptions, events, and wire format",
+      "docs-存储与扩展协议": "Storage and extension protocols",
+      "docs-database会话事实": "Database: conversation facts",
+      "docs-runstore运行证据": "RunStore: execution evidence",
+      "docs-模型执行器收件箱与记忆": "Model, executor, inbox, and memory",
+      "docs-工具与策略": "Tools and policy",
+      "docs-加密与权限边界": "Cryptography and authorization boundaries",
+      "docs-版本与下一步": "Versions and next steps"
+    }
+  },
+  {
+    "file": "errors-and-limits.md",
+    "slug": "errors-and-limits",
+    "group": "Contracts and limits",
+    "section": "reference",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-运行与连接": "Execution and connections",
+      "docs-回放与输入": "Replay and input",
+      "docs-存储与恢复": "Storage and recovery",
+      "docs-配置与产品责任": "Configuration and product responsibilities",
+      "docs-下一步": "Next steps"
+    }
+  },
+  {
+    "file": "glossary.md",
+    "slug": "glossary",
+    "group": "Terms and releases",
+    "section": "reference",
+    "lang": "en",
+    "heading_aliases": {
+      "docs-一次任务": "One task",
+      "docs-输出与控制": "Output and control",
+      "docs-数据与扩展": "Data and extensions",
+      "docs-下一步": "Next steps"
+    }
   },
   {
     "file": "CHANGELOG.md",
     "slug": "CHANGELOG",
-    "group": "更新内容",
+    "group": "Terms and releases",
     "drop_sections": [
       "## [Unreleased]"
     ],
-    "publication_note": "只列出已发布版本；未发布的改动不在此列。",
-    "section": "changelog"
+    "publication_note": "Released versions only; unreleased changes are not listed. Reader question: Which changes have shipped? Prerequisites: None. Outcome: Confirm upgrade scope.",
+    "section": "reference",
+    "lang": "en"
   }
 ]
