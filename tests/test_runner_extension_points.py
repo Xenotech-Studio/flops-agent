@@ -128,7 +128,7 @@ def test_on_stream_end_runs_before_reply_is_built():
 
 
 def test_on_stream_open_runs_after_request_before_first_chunk():
-    """流已建立钩子夹在 acompletion 与首 chunk 之间，产品无需覆写 consume_stream。"""
+    """The stream-open hook runs between acompletion and the first chunk, without requiring products to override consume_stream."""
     order = []
 
     class OpeningRunner(Runner):
@@ -149,9 +149,11 @@ def test_on_stream_open_runs_after_request_before_first_chunk():
 
 
 def test_before_llm_call_runs_before_acompletion_and_on_stream_open():
-    """before_llm_call 必须先于 acompletion 调用发生——它是产品层起「等待模型」指示器
-    最早也最可靠的挂钩点：acompletion 经常要等供应商响应就绪才返回，返回后到首个
-    chunk 之间可能只有几毫秒，on_stream_open 那时才起指示器往往已经来不及。"""
+    """before_llm_call must run before acompletion is called. It is the earliest and
+    most reliable hook for a product to show a "waiting for model" indicator:
+    acompletion often waits for the provider response to be ready before returning.
+    The first chunk may arrive only milliseconds later, so starting the indicator
+    in on_stream_open is often too late."""
     order = []
 
     class BeforeCallRunner(Runner):
