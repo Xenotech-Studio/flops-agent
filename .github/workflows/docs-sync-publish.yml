@@ -1,0 +1,44 @@
+name: Mirror English documentation
+on:
+  push:
+    branches: [master]
+    paths: ['docs/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: docs-sync-publish
+  cancel-in-progress: false
+jobs:
+  mirror:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+          # Always mirror current default-branch content, even when rerunning an old job.
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Xenotech-Studio/flops-agent-docs
+          ref: main
+          path: target
+          # Fine-grained PAT: target repository only, Contents: read and write.
+          token: ${{ secrets.FLOPS_AGENT_DOCS_SYNC_TOKEN }}
+      - name: Mirror docs only and publish a non-empty commit
+        shell: bash
+        run: |
+          bash source/scripts/mirror-docs.sh "$PWD/source" "$PWD/target"
+          source_sha=$(git -C source rev-parse HEAD)
+          cd target
+          git add -A -- docs/en
+          if git diff --cached --quiet; then
+            echo "English mirror unchanged; no commit."
+            exit 0
+          fi
+          git config user.name 'flops-agent-docs-sync[bot]'
+          git config user.email 'flops-agent-docs-sync[bot]@users.noreply.github.com'
+          git commit -m "chore(sync): mirror docs from Xenotech-Studio/flops-agent@$source_sha"
+          git push origin HEAD:main
