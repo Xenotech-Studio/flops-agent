@@ -13,21 +13,29 @@ jobs:
   mirror:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    env:
+      SYNC_TOKEN: ${{ secrets.FLOPS_AGENT_DOCS_SYNC_TOKEN }}
     steps:
+      - name: Skip optional push mirror when token is absent
+        if: env.SYNC_TOKEN == ''
+        run: echo "FLOPS_AGENT_DOCS_SYNC_TOKEN not configured; skipping push-based mirror. The docs repo pulls on a schedule instead."
       - uses: actions/checkout@v4
+        if: env.SYNC_TOKEN != ''
         with:
           path: source
           # Always mirror current default-branch content, even when rerunning an old job.
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - uses: actions/checkout@v4
+        if: env.SYNC_TOKEN != ''
         with:
           repository: Xenotech-Studio/flops-agent-docs
           ref: main
           path: target
           # Fine-grained PAT: target repository only, Contents: read and write.
-          token: ${{ secrets.FLOPS_AGENT_DOCS_SYNC_TOKEN }}
+          token: ${{ env.SYNC_TOKEN }}
       - name: Mirror docs only and publish a non-empty commit
+        if: env.SYNC_TOKEN != ''
         shell: bash
         run: |
           bash source/scripts/mirror-docs.sh "$PWD/source" "$PWD/target"
