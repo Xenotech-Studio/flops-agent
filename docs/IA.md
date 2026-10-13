@@ -4,7 +4,7 @@
 
 This repository-only document records the design and verification plan. It is not in the website publication manifest. The design was completed before the content and navigation implementation.
 
-Readers first need to decide whether the framework fits, then achieve a reproducible success, build a mental model, and extend by product task. Learn teaches tasks; Reference provides exact contracts and boundaries. Each page states its reader question, prerequisites, and outcome, with verification and a next step. Beginners do not need to read the entire API first.
+Readers first need to understand what the framework is, then achieve a reproducible success, build a mental model, and extend by product task. Learn teaches tasks; Reference provides exact contracts and boundaries. Task and reference pages state their reader question, prerequisites, and outcome, with verification and a next step. The introduction is an overview: it defines the framework, explains why to use it and what it does, then gives starting points, boundaries, further reading, responsibilities, and sources. It does not use the three metadata blocks. Beginners do not need to read the entire API first.
 
 The top-level areas are **Learn / Reference**. The first Learn chapter is **The basics**; the remaining chapters and task titles are also English. The public OSS repository and website use English throughout. Code identifiers keep their original names. Stable section labels such as Try it, Check the result, Boundaries, Next steps, and Code evidence support both readers and agents.
 
@@ -14,9 +14,9 @@ Public capability claims use `v0.2.0` as the baseline and are checked against th
 
 Prerequisites describe a suggested reading order, not access restrictions. All URLs remain flat.
 
-| Area / chapter | File / URL | Task-oriented title | Problem solved | Audience | Prerequisites | Outcome |
+| Area / chapter | File / URL | Page title | Problem solved | Audience | Prerequisites | Outcome |
 |---|---|---|---|---|---|---|
-| Learn / The basics | README.md / /docs | Decide whether the framework fits your task | Clarify framework and product responsibilities | New readers | None | Choose a learning path and recognize example boundaries |
+| Learn / The basics | README.md / /docs | What is flops-agent | Introduce the framework, capabilities, and integration boundaries | New readers | None; no prerequisite block on the page | Understand the framework and find a starting point; no outcome block on the page |
 | Same chapter | 01-quick-start.md / /docs/01-quick-start | Run a task in five minutes | Obtain observable output from an offline script | Python beginners to the framework | Introduction (/docs) | Install and run the example; identify tool and memory output |
 | Same chapter | 02-core-concepts.md / /docs/02-core-concepts | Understand how a task runs | Derive four minimal concepts from a successful run | Readers who ran the example | 01 | Distinguish Runtime, Session, Query, and Run; start another turn |
 | Learn / Build a service | connect-model.md / /docs/connect-model | Connect your own model | Replace the deterministic double with a real client | Integration developers | 02 | Configure a compatible endpoint and check its first output |
@@ -99,11 +99,11 @@ Add `/docs/connect-model`, `/docs/context-window`, `/docs/customize-runner`, `/d
 
 The manifest drives section and chapter order: docs-sections.json contains only learn/reference; array order in docs-sources.json determines chapter and page order, group names the chapter, and overview selects the tab destination. Each page exports consistent source, section, and canonical metadata. The build no longer substitutes README.
 
-Check every page's promise, prerequisites, result, and next step. Run the offline example and new complete Python examples, and verify source evidence. Scan public content for private addresses, credential paths, deployment details, and internal plans. Verify every page, deep refresh, raw MIME type, manifest consistency, and old URL. Recheck themes, the six-size type scale, header alignment, bleed, transitions, and narrow layouts. The IA implementation evidence is in /home/ubuntu/tmp/fw-ia/; English-language verification is in /home/ubuntu/tmp/fw-en/.
+Check the introduction's definition, capabilities, boundaries, and starting points; check each task or reference page's promise, prerequisites, result, and next step. Run the offline example and new complete Python examples, and verify source evidence. Scan public content for private addresses, credential paths, deployment details, and internal plans. Verify every page, deep refresh, raw MIME type, manifest consistency, and old URL. Recheck themes, the six-size type scale, header alignment, bleed, transitions, and narrow layouts. The IA implementation evidence is in /home/ubuntu/tmp/fw-ia/; English-language verification is in /home/ubuntu/tmp/fw-en/.
 
 ## Implementation record
 
-Completed: 10 old articles substantially rewritten, 6 added, and historical CHANGELOG content retained; the website has 17 pages. The substitute overview source was removed; the website reads docs/README.md directly. Each page or publication note states a reader question, prerequisites, and outcome. Learn pages provide checks and next steps; Reference provides lookup destinations.
+Completed: 10 old articles substantially rewritten, 6 added, and historical CHANGELOG content retained; the website has 17 pages. The substitute overview source was removed; the website reads docs/README.md directly. The other 16 published pages retain reader question, prerequisites, and outcome metadata, either in the source or, for CHANGELOG, its publication note. The introduction instead uses an overview opening without those metadata blocks. Learn pages provide checks and next steps; Reference provides lookup destinations.
 
 The 43 pre-redesign H2/H3 fragments remain addressable. Manifest heading_aliases map them to semantic sections without new routes or layout height. Moved topics link onward. The index exports heading_aliases so agents can interpret old links. The English correction also preserves the headings introduced by the redesign as non-visible compatibility identifiers; alias labels and all reader-facing content are English.
 

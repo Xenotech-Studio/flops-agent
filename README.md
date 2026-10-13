@@ -22,13 +22,18 @@ The website, publication manifests, translations and site build validation have 
 [Xenotech-Studio/flops-agent-docs](https://github.com/Xenotech-Studio/flops-agent-docs).
 Do not edit the generated `docs/en/` mirror there directly.
 
-The `docs-sync-publish.yml` workflow mirrors default-branch documentation changes only.
-The owner must add `FLOPS_AGENT_DOCS_SYNC_TOKEN` under this repository's
-Settings → Secrets and variables → Actions: a fine-grained PAT scoped to
-`Xenotech-Studio/flops-agent-docs` with Contents read/write permission.
-No CI job deploys the site. See the new repository's `MIGRATION.md` for handoff steps.
+By default, `sync-docs.yml` in `flops-agent-docs` pulls this repository's `docs/**`
+every 30 minutes without any token or secret. It also supports `workflow_dispatch`
+for an immediate manual sync.
 
-`deploy/nginx-flopsruntime.conf` stays here temporarily for the existing server.
-The eventual target is to serve the new repository's manually built `website/dist/`
-(or copy that output into the existing release directory); the owner will handle
-that later. This migration does not change nginx or the live deployment.
+This repository's `docs-sync-publish.yml` remains an optional immediate push channel
+for default-branch documentation changes. Without `FLOPS_AGENT_DOCS_SYNC_TOKEN`,
+it skips the sync and succeeds. To enable immediate pushes, add that Actions secret
+as a fine-grained PAT with Contents read/write permission on
+`Xenotech-Studio/flops-agent-docs`.
+
+The live site at https://flops-agent.xenotech.studio serves build output from
+`flops-agent-docs`, including Chinese documentation at `/zh-CN/docs/<slug>`.
+Site configuration and deployment belong to that repository, including
+`deploy/nginx-flopsdocs.conf`. The site is built and deployed manually on the
+server; no CI job deploys it.
