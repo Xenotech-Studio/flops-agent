@@ -24,7 +24,7 @@ Runtime assembles the app, and Runner drives the model and tool loop. Start with
 | --- | --- | --- |
 | `agent`: role and instructions | `Agent()` | An Agent configured with a name and instructions |
 | `llm`: model requests and streamed replies | `PseudoLLMStreamClient`, a scripted stand-in | A model client such as `OpenAIStreamClient` |
-| `tools`: business capabilities available to the model | `delivery_fee`, a fixed delivery fee | Your business tools |
+| `tools`: business capabilities available to the model | `get_record_status`, record status lookup by ID | Your business tools |
 | `database`: save sessions and messages | `InMemoryDatabase`, process-local memory | Your chosen persistent backend |
 | `run_store`: save run logs and state | `InMemoryRunStore`, process-local memory | A persistent backend implementing RunStore |
 | `executor`: execute tool calls | Packaged `DefaultToolExecutor`, local execution | Keep it or use a remote executor adapter to suit deployment |
@@ -43,9 +43,10 @@ from flops_agent import (
 from flops_agent.seams.executor import DefaultToolExecutor
 
 
-def delivery_fee(city: str) -> str:
-    """Look up the delivery fee for a city."""
-    return f"The delivery fee for {city} is 6 CNY"
+def get_record_status(record_id: str) -> str:
+    """Look up the status of a record."""
+    statuses = {"record-1": "ready", "record-2": "pending"}
+    return statuses.get(record_id, "unknown")
 
 
 class PseudoLLMStreamClient:
@@ -56,8 +57,8 @@ class PseudoLLMStreamClient:
                 yield TextStreamChunk(text=f"Result: {last['content']}")
             else:
                 yield ToolCallStreamChunk(
-                    index=0, id="fee-1", name="delivery_fee",
-                    arguments_delta='{"city": "Shanghai"}',
+                    index=0, id="status-1", name="get_record_status",
+                    arguments_delta='{"record_id": "record-1"}',
                 )
         return stream()
 ```
@@ -68,7 +69,7 @@ The second block assembles Runtime. `tools` registers the function and its param
 def build_runtime():
     return Runtime(
         agent=Agent(),
-        llm=PseudoLLMStreamClient(), tools=[delivery_fee],
+        llm=PseudoLLMStreamClient(), tools=[get_record_status],
         database=InMemoryDatabase(), run_store=InMemoryRunStore(),
         executor=DefaultToolExecutor(), runner=Runner, model="scripted-model",
     )
@@ -84,7 +85,7 @@ Append the third block to the same `app.py`: this demonstration entry point crea
 async def main():
     runtime = build_runtime()
     session = await runtime.load_session("my-first-app")
-    run = runtime.start(session, Query.text("Please check the delivery fee for Shanghai"))
+    run = runtime.start(session, Query.text("Please check the status of record-1"))
     async for delivery in run:
         event = delivery.event
         if isinstance(event, ToolResult):
@@ -105,11 +106,11 @@ python app.py
 You will see this complete output, produced with `flops-agent==0.2.0` from PyPI:
 
 ```text
-Tool result: The delivery fee for Shanghai is 6 CNY
-Model reply: Result: The delivery fee for Shanghai is 6 CNY
+Tool result: ready
+Model reply: Result: ready
 ```
 
-`load_session()` loads or creates a Session, `Query.text()` carries the user request, and `start()` returns a Run for this execution. Runner calls the model stand-in, receives a tool request, and asks the executor to call `delivery_fee()`; the first line is the tool's return value.
+`load_session()` loads or creates a Session, `Query.text()` carries the user request, and `start()` returns a Run for this execution. Runner calls the model stand-in, receives a tool request, and asks the executor to call `get_record_status()`; the first line is the tool's return value.
 
 Runner writes the tool result back to the session, then calls `llm` again to generate the reply on the second line. The entry point consumes this run's events with `async for`, handling tool results and text deltas. `database` saves the session, and `run_store` saves run logs and state; these seams do not print separate lines.
 
@@ -119,7 +120,7 @@ Read [Connect your own model](connect-model.md) to replace `llm` and `model`; re
 
 ## Boundaries
 
-The scripted stand-in always queries Shanghai, does not interpret user input, and makes no real model request; the delivery fee function returns a fixed fee. Sessions and run records exist only in the current process; use persistent implementations according to your retention needs in production. Storage backends do not retain process-local Run handles, so do not rebuild Runtime for each streaming connection.
+The scripted stand-in always queries `record-1`, does not interpret user input, and makes no real model request; the status lookup function only reads built-in demo data and returns `unknown` when a record is not found. Sessions and run records exist only in the current process; use persistent implementations according to your retention needs in production. Storage backends do not retain process-local Run handles, so do not rebuild Runtime for each streaming connection.
 
 ## Code references
 
