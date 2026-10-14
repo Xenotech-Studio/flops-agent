@@ -111,9 +111,13 @@ class MyClient:
 
 This minimal implementation preserves a request-level `model`, using the constructor’s model only when it is absent. Tool-call `index`, `id`, `name`, and `arguments_delta` must correspond to incremental data for the same call; do not turn tool calls into ordinary text. Network, HTTP status, and parsing failures propagate, and cancellation is not swallowed.
 
-## Make providers and models switchable
+## One client serves every session
 
-Append this factory to `model_client.py`. Without `MODEL_PROVIDER`, it selects the packaged client; `custom` selects your implementation. When switching, configure the corresponding URL, key, and model name together:
+The framework is designed for concurrent conversations, multiple agents, and multiple users. Construct Runtime once at application startup and share it across sessions; each Run has its own Runner. Construct the injected `llm` client once as well: different runs will call that same instance concurrently.
+
+The client must therefore be **free of per-request state**: never store a request's user, model, or key on `self`. Pass the model and credentials with each `acompletion(**kw)` call and use them only in that call's local variables. A router may hold stable configuration and reusable underlying clients; “stateless” means it does not remember which user's request is current. This requirement also applies to those underlying clients and is a prerequisite for sharing Runtime concurrently.
+
+A factory selects the **implementation class** from the environment at startup; the resulting instance must meet this requirement. Append the factory below to `model_client.py`: without `MODEL_PROVIDER`, it selects the packaged implementation; `custom` selects your implementation. The URL, key, and default model here are stable deployment configuration. Never write a user's configuration back to these attributes while handling a request. When users need different credentials, the adapter must authenticate with credentials from the current call; the constructor-configured examples above still need that adaptation.
 
 ```python
 def build_llm_client() -> LLMStreamClient:
@@ -130,15 +134,7 @@ def build_llm_client() -> LLMStreamClient:
     raise ValueError("Unsupported MODEL_PROVIDER")
 ```
 
-The factory selects a client once during application assembly; it does not switch providers automatically for each request. It implements the two branches above. The next section shows an optional way to route individual requests.
-
-## Serving multiple users: keep the client stateless
-
-The factory above chooses a client **at startup**: process-level selection is enough for a single-user, single-model tool. When one service handles different users and models, putting each user's model, key, and in-flight state on that shared client makes it harder to reuse safely.
-
-For **request-level routing**, keep the client free of per-request state. Pass the model and credentials with each `acompletion(**kw)` call, and keep them in local variables. Stable configuration and reusable underlying clients can remain on the router; “stateless” here means it never remembers the current user's request. This lets one client serve different users and models while the application constructs Runtime once and reuses it. Do not overwrite shared defaults between calls.
-
-Save this standalone, offline example as `request_routing.py` and run `python request_routing.py` with `flops-agent==0.2.0`. `RouterClient` uses the prefix of `model` to select one of two simulated clients, then forwards the remaining model name and the request's credentials. The prefix is an application convention, not a routing feature built into the framework. Both requests share the same router and Runtime and run concurrently; the keys below are fake test values, never real credentials.
+The following demonstrates the standard calling pattern for a shared client: each run carries its own model and credentials, and the client routes using those parameters. Save it as `request_routing.py` and run `python request_routing.py` with `flops-agent==0.2.0`. `RouterClient` uses the prefix of `model` to select one of two simulated clients, then forwards the remaining model name and the current credentials. The prefix is an application convention, not a routing feature built into the framework. Both requests share the same router and Runtime and run concurrently; the keys below are fake test values.
 
 ```python
 import asyncio
@@ -214,13 +210,13 @@ A: small
 B: large
 ```
 
-`RoutedRunner` bridges each run's `context` into completion parameters; `Runtime.start()` accepts that context, whereas `Runtime.ask()` has no per-request model argument. Each simulated client checks its own request's fake key after yielding control, so the example also catches credentials being mixed between these two concurrent calls. In a real application, the trusted application layer selects an allowed model and obtains its credentials; the underlying adapter consumes those credentials for authentication rather than placing them in messages or logs. The constructor-configured clients above would need that adaptation before accepting per-request credentials.
+`RoutedRunner` bridges each run's `context` into completion parameters; `Runtime.start()` accepts that context, whereas `Runtime.ask()` has no per-request model argument. Each simulated client checks its own request's fake key after yielding control, verifying that these two concurrent calls do not mix credentials. In a real application, the trusted application layer selects an allowed model and obtains its credentials; the underlying adapter uses them for authentication rather than placing them in messages or logs.
 
-**Single user / single model → the factory is enough; multiple users / models → a client without per-request state plus request-level parameters.** These approaches can coexist: a startup factory can construct a router, and the router chooses a destination on each call. The next section continues the simpler factory-based app; this standalone routing example is optional.
+If request A writes user A's key to a shared instance's `self.api_key`, request B can overwrite it with user B's key while A is waiting. A may then resume and call the provider as B. This is why a client must not retain the current request's state: the factory constructs the instance, and differences between calls belong in request parameters.
 
 ## Connect it to your app
 
-Put `model_client.py` beside the `app.py` from 01 and replace its `build_runtime()` with the following. Keep the other imports, `get_weather`, and entry point from 01:
+Put `model_client.py` beside the `app.py` from 01 and replace its `build_runtime()` with the following. Call this assembly function once at application startup and reuse the returned Runtime and client, rather than reconstructing them for each request. This code keeps deployment defaults; models and credentials that vary by run enter through the Runner request-building path above. Keep the other imports, `get_weather`, and entry point from 01:
 
 ```python
 import os
@@ -246,7 +242,7 @@ Your product supplies credentials and configuration; the framework does not mana
 
 The example clients do not automatically retry or fall back. Provider retry, fallback, and routing policies belong to the product. Version 0.2.0 separately offers optional `Runtime.llm_stream_retry` to resend the current step when a stream call fails; it is disabled by default. It provides no cross-provider fallback and does not replace provider-specific client policy. Avoid duplicated retries across layers; retries after output has begun also need to handle duplicate content.
 
-The factory and the optional router above are application-defined provider-selection logic; the framework has no built-in multi-provider router. The custom interface illustrates only text and tool calls. Adapt reasoning, finish reasons, or usage fields to the provider’s actual responses as needed. Tool execution and authorization remain product responsibilities.
+The factory selects an implementation, and the router selects a destination per request. Both are application-defined; the framework has no built-in multi-provider router, but shared clients must meet the concurrency requirement of retaining no per-request state. The custom interface illustrates only text and tool calls. Adapt reasoning, finish reasons, or usage fields to the provider’s actual responses as needed. Tool execution and authorization remain product responsibilities.
 
 ## Next steps
 
