@@ -18,7 +18,7 @@ The `providers` extra includes the HTTP client dependency for connecting a real 
 
 ## Write your app
 
-Runtime brings together the app’s model client, tools, storage, and executor. This tutorial uses the package’s in-memory storage and local executor, plus the scripted stand-in below, to get the flow running. Once you see a reply, replace the components one at a time as needed.
+Runtime brings together the app’s LLM module, tools, storage, and executor. This tutorial uses the package’s in-memory storage and local executor, plus the scripted stand-in below, to get the flow running. Once you see a reply, replace the components one at a time as needed.
 
 You will encounter four of these parts here:
 

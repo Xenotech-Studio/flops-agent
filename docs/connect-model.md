@@ -250,7 +250,7 @@ The factory selects an implementation, and the router selects a destination per 
 
 ## Next steps
 
-Next, read [Resume receiving results after disconnection](03-streaming-and-sse.md). Inject the verified LLM module into the Runtime your product keeps around, then connect run output to client subscriptions.
+Next, read [Scheduling work with Session and Run](03-streaming-and-sse.md). Use the Runtime your product keeps around to start work, leave it running, and return for its results.
 
 If you want to jump directly to:
 

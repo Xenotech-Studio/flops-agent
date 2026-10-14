@@ -10,13 +10,13 @@ The product wraps the new input in `Query.text(text)`. A Query carries the input
 
 ## Runtime starts the response
 
-Runtime is usually assembled at product startup with the model client, tools, and storage configuration. The product calls `runtime.start(session, query)` to pass it the existing conversation and new question.
+Runtime is usually assembled at product startup with the LLM module, tools, and storage configuration. The product calls `runtime.start(session, query)` to pass it the existing conversation and new question.
 
 The call immediately returns a Run and advances execution in the background. The Run tracks this turn’s id, state, and output events; the product uses it to subscribe to progress, wait for the result, or request a stop. The Session continues to hold the conversation for later questions.
 
 ## The model answers and calls tools when needed
 
-The Runner behind the Run adds the user input to the conversation and builds a model request from the message history and tool descriptions. The model can answer directly or request a tool call. Requests go through the `llm` client; when integrating a service, replace the scripted stand-in with a real model client as described in [Connect your own model](connect-model.md).
+The Runner behind the Run adds the user input to the conversation and builds a model request from the message history and tool descriptions. The model can answer directly or request a tool call. Requests go through the LLM module supplied as `llm`; when integrating a service, replace the scripted stand-in with a real LLM module as described in [Connect your own model](connect-model.md).
 
 When a tool is needed, Runner dispatches it, writes the result back to the conversation, and passes it to the model for further processing. One user question can therefore involve several model calls before the response is complete. If an Agent is connected, it can also supply identity, instructions, and memory; a first integration can use the default Runner without configuring an Agent.
 
@@ -75,11 +75,11 @@ Do not start a second Run while the same Session already has an active one. Wait
 
 ## Next steps
 
-Next, read [Connect your own model](connect-model.md). With the runtime objects’ responsibilities clear, replace the example’s model stub with a real client and verify requests and output.
+Next, read [Connect your own model](connect-model.md). With the runtime objects’ responsibilities clear, replace the example’s model stub with a real LLM module and verify requests and output.
 
 If you want to jump directly to:
 
-- [Subscriptions and reconnection](03-streaming-and-sse.md) — Deliver run output to clients.
+- [Scheduling work with Session and Run](03-streaming-and-sse.md) — Start work and collect its results later.
 - [Glossary](glossary.md) — Look up terms for runtime objects and events.
 
 ## Code evidence

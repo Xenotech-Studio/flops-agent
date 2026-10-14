@@ -15,7 +15,7 @@
 | Runner | Steps and policy that advance an execution | Agent identity configuration |
 | Agent | Identity, instructions, model preference, and memory configuration | A run pool or infrastructure |
 
-Tutorial: [Understand how a task runs](02-core-concepts.md). Code: `src/flops_agent/engine/runtime.py:105`, `src/flops_agent/entities/query.py:37`, `src/flops_agent/entities/agent.py:39`.
+Tutorial: [How a user question is answered](02-core-concepts.md). Code: `src/flops_agent/engine/runtime.py:105`, `src/flops_agent/entities/query.py:37`, `src/flops_agent/entities/agent.py:39`.
 
 ## Output and control
 

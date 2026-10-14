@@ -1,6 +1,6 @@
 # What is flops-agent
 
-flops-agent is a Python framework for embedding an agent runtime in your backend service. It provides the core loop of model calls, tool execution, and result feedback, along with sessions, run state, and streaming output. Connect your model client and business tools, start with the default loop, and add product logic through Runner, Memory, and executor interfaces.
+flops-agent is a Python framework for embedding an agent runtime in your backend service. It provides the core loop of model calls, tool execution, and result feedback, along with sessions, run state, and streaming output. Connect your LLM module and business tools, start with the default loop, and add product logic through Runner, Memory, and executor interfaces.
 
 ## Why use it
 
@@ -18,11 +18,11 @@ flops-agent is a Python framework for embedding an agent runtime in your backend
 
 ## Start here
 
-Run the offline example in [Run a task in five minutes](01-quick-start.md) to observe tool calls and memory output without an API key. Then read [Understand how a task runs](02-core-concepts.md) to learn how Runtime, Session, Query, and runs fit together before connecting a business tool of your own. For interface details, go to [Reference](reference.md).
+Run the offline example in [Run a task in five minutes](01-quick-start.md) to observe tool calls and memory output without an API key. Then read [How a user question is answered](02-core-concepts.md) to learn how Runtime, Session, Query, and runs fit together before connecting a business tool of your own. For interface details, go to [Reference](reference.md).
 
 ## Boundaries
 
-Version v0.2.0 is a public beta. The offline example demonstrates the loop; a real integration still needs a model client, HTTP endpoints, persistent backends, and authorization logic. Validate tool arguments, idempotency, and recovery paths. Recovery after a process restart requires persisted sessions and run records, plus product code to reconstruct the execution context; the default in-memory stores cannot provide it.
+Version v0.2.0 is a public beta. The offline example demonstrates the loop; a real integration still needs an LLM module, HTTP endpoints, persistent backends, and authorization logic. Validate tool arguments, idempotency, and recovery paths. Recovery after a process restart requires persisted sessions and run records, plus product code to reconstruct the execution context; the default in-memory stores cannot provide it.
 
 To centralize enterprise data or let a cloud-hosted agent call tools on employee computers and shared devices, integrate the storage interfaces and remote execution protocol. The framework provides cryptographic primitives, but your product determines storage location, key management, device connections, and access permissions. Employee privacy protections require separate product design and validation.
 
@@ -32,8 +32,8 @@ Next, read [Build your first app](01-quick-start.md). Run the offline example to
 
 If you want to jump directly to:
 
-- [Connect your own model](connect-model.md) — Replace the example’s model client and model configuration.
-- [Resume receiving results after disconnection](03-streaming-and-sse.md) — Connect client subscriptions and reconnection.
+- [Connect your own model](connect-model.md) — Replace the example’s LLM module and model configuration.
+- [Scheduling work with Session and Run](03-streaming-and-sse.md) — Start work, step away, and return for results.
 - [Stop a task and accept user input](05-cancellation-and-suspension.md) — Handle stopping, suspension, and additional input.
 - [Save and continue conversations](04-sessions-and-persistence.md) — Persist conversations and run records.
 - [Recover tasks after a restart](06-recovery.md) — Complete recovery prerequisites and validation.
@@ -46,7 +46,7 @@ If you want to jump directly to:
 
 | What you need | What the framework provides | What you supply |
 |---|---|---|
-| Complete a model-and-tool interaction | Runtime, Runner, and tool dispatch | A model client and tool business logic |
+| Complete a model-and-tool interaction | Runtime, Runner, and tool dispatch | An LLM module and tool business logic |
 | Deliver results incrementally to a browser | Events, subscriptions, SSE encoding, and replay cursors | HTTP routes, authentication, and client rendering |
 | Continue a conversation on the next request | Session and the Database protocol | A persistent backend and user isolation policy |
 | Connect long-term memory | Memory interfaces and call timing | Retrieval logic and memory storage |
