@@ -18,19 +18,14 @@ The `providers` extra includes the HTTP client dependency for connecting a real 
 
 ## Write your app
 
-Runtime assembles the app, and Runner drives the model and tool loop. Start with in-memory storage, then replace components as needed; Agent configures the role and instructions.
+Runtime brings together the app’s model client, tools, storage, and executor. This tutorial uses the package’s in-memory storage and local executor, plus the scripted stand-in below, to get the flow running. Once you see a reply, replace the components one at a time as needed.
 
-| Seam / configuration and responsibility | Used here | Used in a real product |
-| --- | --- | --- |
-| `agent`: role and instructions | `Agent()` | An Agent configured with a name and instructions |
-| `llm`: model requests and streamed replies | `PseudoLLMStreamClient`, a scripted stand-in | A model client such as `OpenAIStreamClient` |
-| `tools`: business capabilities available to the model | `get_weather`, a demo weather lookup | Your business tools |
-| `database`: save sessions and messages | `InMemoryDatabase`, process-local memory | Your chosen persistent backend |
-| `run_store`: save run logs and state | `InMemoryRunStore`, process-local memory | A persistent backend implementing RunStore |
-| `executor`: execute tool calls | Packaged `DefaultToolExecutor`, local execution | Keep it or use a remote executor adapter to suit deployment |
-| `memory`: optional product seam | Not connected (default `None`) | Product-defined recall and maintenance; add later with [Connect long-term memory](long-term-memory.md) |
-| `runner`: drive the loop | Packaged `Runner` | Keep it or subclass to customize product policy |
-| `model`: model name passed to the client | `"scripted-model"`, a placeholder | A model name supported by your provider |
+You will encounter four of these parts here:
+
+- `llm` → `PseudoLLMStreamClient` (a scripted stand-in; for a real model, see [Connect your own model](connect-model.md))
+- `tools` → `get_weather` (your business tool; for more, see [Give your agent a tool](07-extending.md))
+- `database / run_store` → in-memory implementations (for persistence, see [Save a conversation and continue it](04-sessions-and-persistence.md))
+- `memory` → not connected (optional; see [Connect long-term memory](long-term-memory.md))
 
 Create `app.py` and add the following three blocks in order. The first defines a business tool and a model stand-in; the stand-in requests the tool, then uses its result to compose a reply.
 
@@ -115,7 +110,7 @@ Runner writes the tool result back to the session, then calls `llm` again to gen
 
 ## Next steps
 
-Next, read [Understand how a task runs](02-core-concepts.md). Follow the example you just ran to understand how Runtime, Session, Query, and Run relate before integrating a service.
+Next, read [How a user question is answered](02-core-concepts.md). Follow the example you just ran to understand how Runtime, Session, Query, and Run relate before integrating a service.
 
 If you want to jump directly to:
 

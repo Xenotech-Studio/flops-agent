@@ -1,33 +1,44 @@
-# Understand how a task runs
+# How a user question is answered
 
-**Reader question:** Which objects handled the example, and where should I send the next message?
+After running [your first app](01-quick-start.md), follow one user question through the system: how input arrives, how the model calls tools, and how the response reaches the user. Runtime, Session, Query, and Run each appear where they take part in that flow.
 
-**Prerequisites:** Complete [the five-minute guide](01-quick-start.md). **Outcome:** Explain the execution timeline and complete two turns in the same conversation.
+## The question enters a conversation
 
-## Start with four objects
+When a user sends a message, the product calls `runtime.load_session(...)` with the conversation and owner identifiers to obtain its Session. The Session holds earlier messages so this turn can continue the conversation.
 
-| Object | The question it answers | Lifetime |
-|---|---|---|
-| Runtime | Which model, tools, and storage should do the work? | Usually assembled at product startup |
-| Session | What has this conversation said so far? | Spans multiple runs; can be loaded from Database |
-| Query | What new input does this turn contribute? | One user input, answer, or external event |
-| Run | How far has this turn progressed, and how do I subscribe or stop it? | One execution, with its own id, state, and log |
+The product wraps the new input in `Query.text(text)`. A Query carries the input for this turn; the product still needs to pass it to Runtime to begin generating a response.
 
-Session is a conversation, not the currently executing task. Run is a task, not a browser connection. A Run can have multiple subscribers or temporarily have none.
+## Runtime starts the response
 
-## Follow the execution timeline
+Runtime is usually assembled at product startup with the model client, tools, and storage configuration. The product calls `runtime.start(session, query)` to pass it the existing conversation and new question.
 
-1. The product obtains a Session and constructs a Query from new input.
-2. `runtime.start(session, query)` immediately returns a Run and starts work in the background.
-3. Runner combines history and tool descriptions into a model request.
-4. The model emits text or tool calls. Tool results enter history, and the model is called again if needed.
-5. Run delivers events to subscribers and eventually completes, stops, fails, or suspends.
+The call immediately returns a Run and advances execution in the background. The Run tracks this turn’s id, state, and output events; the product uses it to subscribe to progress, wait for the result, or request a stop. The Session continues to hold the conversation for later questions.
 
-Runner executes the flow. Agent optionally supplies identity, instructions, and memory. You do not need to subclass Runner or configure Agent for your first integration.
+## The model answers and calls tools when needed
+
+The Runner behind the Run adds the user input to the conversation and builds a model request from the message history and tool descriptions. The model can answer directly or request a tool call. Requests go through the `llm` client; when integrating a service, replace the scripted stand-in with a real model client as described in [Connect your own model](connect-model.md).
+
+When a tool is needed, Runner dispatches it, writes the result back to the conversation, and passes it to the model for further processing. One user question can therefore involve several model calls before the response is complete. If an Agent is connected, it can also supply identity, instructions, and memory; a first integration can use the default Runner without configuring an Agent.
+
+Register tools through `tools` and replace the demo with your own business functions, as shown in [Give your agent a tool](07-extending.md); calls are handled by `executor`, which can remain a local executor or become a product-supplied remote adapter to suit deployment. When product policy needs to change the loop, configure a Runner subclass through `runner`, as described in [Put product policy at the right extension point](customize-runner.md).
+
+For long-term memory, connect the optional `memory` on Agent to recall relevant content for model requests and schedule maintenance after normal completion; the product implements recall, maintenance, and storage, as described in [Connect long-term memory](long-term-memory.md).
+
+## Output streams back during execution
+
+As the model and tool loop advances, Runner turns output into events and sends them to the Run. The product receives events through `run.subscribe()` and presents text and progress to the user without waiting for the whole turn to finish.
+
+For a browser client, the product also supplies an HTTP streaming endpoint and handles rendering. A subscription receives output while the Run tracks execution; one Run can have several subscribers or temporarily have none. The RunStore connected through `run_store` saves run logs and state; replace it with a persistent implementation when these records must survive a restart, as described in [Save a conversation and continue it](04-sessions-and-persistence.md).
+
+## The turn ends and the conversation keeps its history
+
+During execution and finalization, Runner writes conversation changes to the configured Database. Connect it through `database` and use a persistent backend when the product must retain conversations across restarts. After normal completion, `await run.wait()` returns `done`, allowing the product to finish waiting for this turn.
+
+When the user asks another question, the product reloads the Session with the same conversation and owner identifiers, retrieves the existing messages, and starts a new Run for the new input. Each turn has its own execution state while sharing the same conversation history.
 
 ## Try it: two turns in one conversation
 
-Save the following as `two_turns.py` at the repository root and run `python two_turns.py` in your existing virtual environment. This still uses the repository's deterministic model. The second response is scripted; it does not demonstrate that a real model understood the history.
+Save the following as `two_turns.py` at the repository root and run `python two_turns.py` in your existing virtual environment. The example uses the repository’s deterministic model to record a name and then send a second input in the same conversation.
 
 ```python
 import asyncio
@@ -54,9 +65,13 @@ async def main():
 asyncio.run(main())
 ```
 
-## Check the result
+Both runs should end in `done`. The final history roles should contain two pairs of `user` and `assistant`, corresponding to the two inputs and responses.
 
-Both runs should end in `done`. The history roles should include two pairs of `user` and `assistant`. This checks continuity of history in the same conversation, not generation quality. Do not start a second Run while the same Session already has an active one. Wait for completion or use [queued input](05-cancellation-and-suspension.md).
+## Boundaries
+
+The example’s second response is scripted. It checks continuity of conversation history, not whether a real model understood that history. The in-memory storage used here also loses messages when the process restarts; retaining conversations across processes requires a persistent backend.
+
+Do not start a second Run while the same Session already has an active one. Wait for completion or use [queued input](05-cancellation-and-suspension.md). Disconnecting a subscription does not automatically stop execution. A run can also stop, fail, or suspend, so the product must not treat every ending as a successful answer.
 
 ## Next steps
 
