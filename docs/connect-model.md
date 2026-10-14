@@ -111,13 +111,9 @@ class CustomLLMStreamClient:
 
 This minimal implementation preserves a request-level `model`, using the constructor’s model only when it is absent. Tool-call `index`, `id`, `name`, and `arguments_delta` must correspond to incremental data for the same call; do not turn tool calls into ordinary text. Network, HTTP status, and parsing failures propagate, and cancellation is not swallowed.
 
-## One LLM module serves every session
+## Make providers and models switchable
 
-The framework is designed for concurrent conversations, multiple agents, and multiple users. Construct Runtime once at application startup and share it across sessions; each Run has its own Runner. Construct the LLM module injected as `llm` once as well: different runs will call that same instance concurrently.
-
-The LLM module must therefore be **free of per-request state**: never store a request's user, model, or key on `self`. Pass the model and credentials with each `acompletion(**kw)` call and use them only in that call's local variables. A router may hold stable configuration and reusable underlying LLM modules; “stateless” means it does not remember which user's request is current. This requirement also applies to those underlying LLM modules and is a prerequisite for sharing Runtime concurrently.
-
-A factory selects the **implementation class** from the environment at startup; the resulting instance must meet this requirement. Append the factory below to `model_module.py`: without `MODEL_PROVIDER`, it selects the packaged implementation; `custom` selects your implementation. The URL, key, and default model here are stable deployment configuration. Never write a user's configuration back to these attributes while handling a request. When users need different credentials, the adapter must authenticate with credentials from the current call; the constructor-configured examples above still need that adaptation.
+A factory selects the LLM module's **implementation class** from the environment at startup. Append the factory below to `model_module.py`: without `MODEL_PROVIDER`, it selects the packaged implementation; `custom` selects your implementation. The URL, key, and default model here are stable deployment configuration. Never write a user's configuration back to these attributes while handling a request. The resulting instance must safely serve concurrent requests.
 
 ```python
 def build_llm_module() -> LLMStreamClient:
@@ -134,7 +130,15 @@ def build_llm_module() -> LLMStreamClient:
     raise ValueError("Unsupported MODEL_PROVIDER")
 ```
 
-The following demonstrates the standard calling pattern for a shared LLM module: each run carries its own model and credentials, and the LLM module routes using those parameters. Save it as `request_routing.py` and run `python request_routing.py` with `flops-agent==0.2.0`. `RouterClient` uses the prefix of `model` to select one of two simulated LLM modules, then forwards the remaining model name and the current credentials. The prefix is an application convention, not a routing feature built into the framework. Both requests share the same router and Runtime and run concurrently; the keys below are fake test values.
+The factory determines which implementation to construct at startup; routing determines the destination of each call. The next section shows how one LLM module supports dynamic provider switching. Each request carries its model and credentials; the constructor-configured examples above need their authentication adapters to accept those per-request credentials.
+
+## An LLM module with dynamic provider switching
+
+**Dynamic switching** lets one LLM module use different providers and models for different requests, including changing the destination for subsequent calls during a run. This requires two things: **the module retains no per-request state**, and **each call receives its model and credentials** through `acompletion(**kw)`. Switching during a run means selecting a new destination when building the next request; it does not reroute a request already sent or a stream already in progress.
+
+These requirements also ensure concurrency safety. The framework supports concurrent conversations, multiple agents, and multiple users by design. The application constructs Runtime once and shares it across sessions; each Run has its own Runner, and runs call the same LLM module injected as `llm` concurrently. Never store a request's user, model, or key on `self`; use them only in that call's local variables. A router may hold stable configuration and reusable underlying LLM modules. “No per-request state” means it does not remember which user's request is current, and the same requirement applies to the underlying modules.
+
+The following `RouterClient` demonstrates switching destinations per request: it uses the prefix of `model` to select one of two simulated LLM modules, then forwards the remaining model name and current credentials. Save it as `request_routing.py` and run `python request_routing.py` with `flops-agent==0.2.0`. The prefix is an application convention, not a routing feature built into the framework. The example uses two concurrent runs to verify that different destinations share one module. To switch destinations on a later call within one run, the application supplies a new model and credentials when building that next request. The keys below are fake test values.
 
 ```python
 import asyncio
