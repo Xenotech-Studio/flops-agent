@@ -130,7 +130,93 @@ def build_llm_client() -> LLMStreamClient:
     raise ValueError("Unsupported MODEL_PROVIDER")
 ```
 
-The factory selects a client once during application assembly; it does not switch providers automatically for each request. For per-request provider or model selection, read the request’s `model` inside your own `acompletion`, use a product-defined mapping to select a client, and forward the request unchanged. Do not mutate a shared client’s defaults for concurrent requests. This example implements only the two factory branches above.
+The factory selects a client once during application assembly; it does not switch providers automatically for each request. It implements the two branches above. The next section shows an optional way to route individual requests.
+
+## Serving multiple users: keep the client stateless
+
+The factory above chooses a client **at startup**: process-level selection is enough for a single-user, single-model tool. When one service handles different users and models, putting each user's model, key, and in-flight state on that shared client makes it harder to reuse safely.
+
+For **request-level routing**, keep the client free of per-request state. Pass the model and credentials with each `acompletion(**kw)` call, and keep them in local variables. Stable configuration and reusable underlying clients can remain on the router; “stateless” here means it never remembers the current user's request. This lets one client serve different users and models while the application constructs Runtime once and reuses it. Do not overwrite shared defaults between calls.
+
+Save this standalone, offline example as `request_routing.py` and run `python request_routing.py` with `flops-agent==0.2.0`. `RouterClient` uses the prefix of `model` to select one of two simulated clients, then forwards the remaining model name and the request's credentials. The prefix is an application convention, not a routing feature built into the framework. Both requests share the same router and Runtime and run concurrently; the keys below are fake test values, never real credentials.
+
+```python
+import asyncio
+from collections.abc import AsyncIterator
+from flops_agent import (
+    Error, LLMStreamClient, Query, Runner, Runtime, Session,
+    StreamChunk, TextDelta, TextStreamChunk,
+)
+
+class DemoClient:
+    def __init__(self, label: str):
+        self.label = label
+
+    async def acompletion(self, **kw: object) -> AsyncIterator[StreamChunk]:
+        model, api_key = kw["model"], kw["api_key"]
+
+        async def stream() -> AsyncIterator[StreamChunk]:
+            await asyncio.sleep(0)
+            assert api_key == f"demo-only-{self.label}"
+            yield TextStreamChunk(text=f"{self.label}: {model}")
+
+        return stream()
+
+class RouterClient:
+    def __init__(self):
+        self.clients = {"fast": DemoClient("A"), "careful": DemoClient("B")}
+
+    async def acompletion(self, **kw: object) -> AsyncIterator[StreamChunk]:
+        route, separator, model = str(kw["model"]).partition("/")
+        if not separator or not model or route not in self.clients:
+            raise ValueError("Unknown model route")
+        request = dict(kw)
+        request["model"] = model
+        return await self.clients[route].acompletion(**request)
+
+class RoutedRunner(Runner):
+    async def build_request(self):
+        request = await super().build_request()
+        request.update(model=self.context["model"], api_key=self.context["api_key"])
+        return request
+
+async def main():
+    client = RouterClient()
+    assert isinstance(client, LLMStreamClient)
+    runtime = Runtime(llm=client, runner=RoutedRunner)
+
+    async def reply(session_id, model, api_key):
+        run = runtime.start(
+            Session(session_id), Query.text("Hello"),
+            context={"model": model, "api_key": api_key},
+        )
+        parts = []
+        async for delivery in run:
+            event = delivery.event
+            if isinstance(event, Error):
+                raise RuntimeError(event.message)
+            if isinstance(event, TextDelta):
+                parts.append(event.text)
+        return "".join(parts)
+
+    results = await asyncio.gather(
+        reply("one", "fast/small", "demo-only-A"),
+        reply("two", "careful/large", "demo-only-B"),
+    )
+    assert results == ["A: small", "B: large"]
+    print(*results, sep="\n")
+
+asyncio.run(main())
+```
+
+```text
+A: small
+B: large
+```
+
+`RoutedRunner` bridges each run's `context` into completion parameters; `Runtime.start()` accepts that context, whereas `Runtime.ask()` has no per-request model argument. Each simulated client checks its own request's fake key after yielding control, so the example also catches credentials being mixed between these two concurrent calls. In a real application, the trusted application layer selects an allowed model and obtains its credentials; the underlying adapter consumes those credentials for authentication rather than placing them in messages or logs. The constructor-configured clients above would need that adaptation before accepting per-request credentials.
+
+**Single user / single model → the factory is enough; multiple users / models → a client without per-request state plus request-level parameters.** These approaches can coexist: a startup factory can construct a router, and the router chooses a destination on each call. The next section continues the simpler factory-based app; this standalone routing example is optional.
 
 ## Connect it to your app
 
@@ -160,7 +246,7 @@ Your product supplies credentials and configuration; the framework does not mana
 
 The example clients do not automatically retry or fall back. Provider retry, fallback, and routing policies belong to the product. Version 0.2.0 separately offers optional `Runtime.llm_stream_retry` to resend the current step when a stream call fails; it is disabled by default. It provides no cross-provider fallback and does not replace provider-specific client policy. Avoid duplicated retries across layers; retries after output has begun also need to handle duplicate content.
 
-The factory above is this example’s entire provider-selection logic; the framework has no built-in multi-provider router. The custom interface illustrates only text and tool calls. Adapt reasoning, finish reasons, or usage fields to the provider’s actual responses as needed. Tool execution and authorization remain product responsibilities.
+The factory and the optional router above are application-defined provider-selection logic; the framework has no built-in multi-provider router. The custom interface illustrates only text and tool calls. Adapt reasoning, finish reasons, or usage fields to the provider’s actual responses as needed. Tool execution and authorization remain product responsibilities.
 
 ## Next steps
 
@@ -180,3 +266,4 @@ These paths and line numbers come from the PyPI installation of `flops-agent==0.
 - `flops_agent/entities/events.py:37`, `:179`: `TextDelta` and `Error` runtime events.
 - `flops_agent/engine/runtime.py:147`, `:1218`: client and model injection, optional retry configuration, and `ask()` event output.
 - `flops_agent/engine/runner.py:392`: optional retry execution and cancellation propagation.
+- `flops_agent/engine/runtime.py:1041`, `flops_agent/engine/runner.py:1038`: per-run context and completion request construction for the routing example.
