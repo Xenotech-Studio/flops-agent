@@ -51,7 +51,11 @@ Closing a connection is not a stop button. Stopping is explicit; see [stopping a
 
 ## Next steps
 
-Connect the stop button, then decide [how to store conversations and logs](04-sessions-and-persistence.md).
+Next, read [Stop a task and accept user input](05-cancellation-and-suspension.md). Subscriptions and execution are independent; add stopping, interaction answers, and additional input for an active task.
+
+If you want to jump directly to:
+
+- [Save and continue conversations](04-sessions-and-persistence.md) — Decide how to store conversations and run logs.
 
 ## Code evidence
 

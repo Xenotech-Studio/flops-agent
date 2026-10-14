@@ -61,7 +61,7 @@ Verify each path separately: disconnecting does not stop execution; an explicit 
 
 ## Next steps
 
-Interaction state must survive requests. Continue with [saving conversations](04-sessions-and-persistence.md).
+Next, read [Save and continue conversations](04-sessions-and-persistence.md). Interaction state must survive requests, so connect conversations and run records to suitable storage backends.
 
 ## Code evidence
 

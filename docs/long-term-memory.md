@@ -88,6 +88,10 @@ In Flops, `MEMORY.md` and `MEMORY_RECENT.md` are logical paths mapped to storage
 
 Define identity isolation, read latency, change detection, concurrency, and exit behavior for your product; saving chat records and distilling reusable knowledge are different responsibilities. After connecting the structure in this chapter, you still need to supply and verify actual read, maintenance, and persistence implementations.
 
+## Next steps
+
+Next, read [Add tools to an agent](07-extending.md). After learning how memory provides context, connect executable business functions so the agent can call your product’s capabilities.
+
 ## Code references
 
 Framework paths are relative to the flops-agent repository; product paths are relative to the Flops repository. This chapter is based on local source inspection, not verification of production switches, write rates, or latency.

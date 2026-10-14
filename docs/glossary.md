@@ -49,4 +49,9 @@ Tutorials: [conversation storage](04-sessions-and-persistence.md), [model input]
 
 ## Next steps
 
-Once you know the term, consult the [API contract](api_surface.md). Return to [Learn](README.md) if you need a starting point.
+Next, read [Released changes](CHANGELOG.md). With the terms clear, check the released versions of these capabilities and the scope of an upgrade.
+
+If you want to jump directly to:
+
+- [API contract](api_surface.md) — Look up interfaces associated with the terms.
+- [Learn](README.md) — Return to the guided introduction.

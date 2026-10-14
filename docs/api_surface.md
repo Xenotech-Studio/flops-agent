@@ -80,4 +80,9 @@ Code: `src/flops_agent/crypto/transport.py:23`, `:57`; `src/flops_agent/crypto/f
 
 ## Versions and next steps
 
-Use [released changes](CHANGELOG.md) to confirm upgrade scope. Do not infer installed-package capabilities from new methods on the current branch. Investigate behavior in [errors and limits](errors-and-limits.md), or return to [Learn](README.md) for step-by-step guidance.
+Next, read [Errors and limits](errors-and-limits.md). With the interface contracts in hand, check calling conditions and product responsibilities against common failures.
+
+If you want to jump directly to:
+
+- [Released changes](CHANGELOG.md) — Confirm upgrade scope; do not infer installed-package capabilities from new methods on the current branch.
+- [Learn](README.md) — Get step-by-step guidance.

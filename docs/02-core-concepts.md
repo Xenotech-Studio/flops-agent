@@ -60,7 +60,12 @@ Both runs should end in `done`. The history roles should include two pairs of `u
 
 ## Next steps
 
-If you have a real model, read [model integration](connect-model.md). To connect a browser, read [subscriptions and reconnection](03-streaming-and-sse.md). Use the [glossary](glossary.md) when you need a reminder of a term.
+Next, read [Connect your own model](connect-model.md). With the runtime objects’ responsibilities clear, replace the example’s model stub with a real client and verify requests and output.
+
+If you want to jump directly to:
+
+- [Subscriptions and reconnection](03-streaming-and-sse.md) — Deliver run output to clients.
+- [Glossary](glossary.md) — Look up terms for runtime objects and events.
 
 ## Code evidence
 

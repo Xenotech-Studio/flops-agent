@@ -115,7 +115,13 @@ Runner writes the tool result back to the session, then calls `llm` again to gen
 
 ## Next steps
 
-Read [Connect your own model](connect-model.md) to replace `llm` and `model`; read [Save and continue a session](04-sessions-and-persistence.md) to connect persistent storage. To add business tools, read [Add tools to your agent](07-extending.md); for Runtime, Session, Query, and Run, read [Understand how tasks run](02-core-concepts.md).
+Next, read [Understand how a task runs](02-core-concepts.md). Follow the example you just ran to understand how Runtime, Session, Query, and Run relate before integrating a service.
+
+If you want to jump directly to:
+
+- [Connect your own model](connect-model.md) — Replace `llm` and `model`.
+- [Save and continue conversations](04-sessions-and-persistence.md) — Connect persistent storage.
+- [Add tools to an agent](07-extending.md) — Connect your own business tools.
 
 ## Boundaries
 

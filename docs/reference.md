@@ -30,6 +30,15 @@ Each page's Raw Markdown link and Copy page Markdown control use the same build-
 
 Changing sections or chapters does not change existing page URLs. Return to [Learn](README.md) for a guided sequence, or go directly to [errors and limits](errors-and-limits.md) when debugging.
 
+## Next steps
+
+Next, read the [API contract](api_surface.md). Move from the reference index to specific interfaces and check the parameters and responsibilities of Runtime operations, events, storage, and extension protocols.
+
+If you want to jump directly to:
+
+- [Learn](README.md) — Follow the guided introduction to the framework.
+- [Errors and limits](errors-and-limits.md) — Diagnose failures by symptom.
+
 ## Code evidence
 
 - `src/flops_agent/__init__.py:1`: the public package facade and its boundaries.

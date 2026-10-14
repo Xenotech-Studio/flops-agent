@@ -46,7 +46,11 @@ If you already have a custom client, its `async acompletion(**request)` must ret
 
 ## Next steps
 
-Inject the verified client into the Runtime your product keeps around, then connect [client subscriptions](03-streaming-and-sse.md). For failures, consult [errors and limits](errors-and-limits.md).
+Next, read [Resume receiving results after disconnection](03-streaming-and-sse.md). Inject the verified model client into the Runtime your product keeps around, then connect run output to client subscriptions.
+
+If you want to jump directly to:
+
+- [Errors and limits](errors-and-limits.md) — Diagnose configuration and runtime failures.
 
 ## Code evidence
 

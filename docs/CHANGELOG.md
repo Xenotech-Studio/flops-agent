@@ -40,3 +40,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 [Unreleased]: https://github.com/Xenotech-Studio/flops-agent/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/Xenotech-Studio/flops-agent/releases/tag/v0.2.0
+## Continue reading
+
+You have reached the end of this reading path. After checking the released version, return to [Learn](README.md) to work through the complete flow, or to [Reference](reference.md) to look up interfaces and limits.

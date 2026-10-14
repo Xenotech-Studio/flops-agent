@@ -43,7 +43,11 @@ To execute a known call without asking the model again, override plan_step and r
 
 ## Next steps
 
-Connect the boundaries using [the product integration checklist](08-worked-example.md). For exact signatures, consult the [API contract](api_surface.md).
+Next, read [Integrate the example into a product](08-worked-example.md). Connect your chosen extension points to a complete request path and verify the boundaries with the product integration checklist.
+
+If you want to jump directly to:
+
+- [API contract](api_surface.md) — Look up exact interface signatures.
 
 ## Code evidence
 

@@ -44,7 +44,12 @@ Character or token estimates do not guarantee provider billing or context valida
 
 ## Next steps
 
-To add a tool, continue to [the tool walkthrough](07-extending.md). To customize other runtime policy, see [choosing an extension point](customize-runner.md).
+Next, read [Connect long-term memory](long-term-memory.md). After controlling history in the current request, distinguish conversation history from reusable memory and learn when recall and maintenance occur.
+
+If you want to jump directly to:
+
+- [Add tools to an agent](07-extending.md) — Connect business functions and verify tool calls.
+- [Choose an extension point](customize-runner.md) — Customize other runtime policies.
 
 ## Code evidence
 

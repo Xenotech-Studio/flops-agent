@@ -28,23 +28,19 @@ To centralize enterprise data or let a cloud-hosted agent call tools on employee
 
 ## Continue reading
 
-### Build a service
+Next, read [Build your first app](01-quick-start.md). Run the offline example to connect the framework’s capabilities to working code for a model-and-tool interaction.
 
-- [Connect your own model](connect-model.md)
-- [Keep receiving results after a disconnect](03-streaming-and-sse.md)
-- [Stop work and accept user input](05-cancellation-and-suspension.md)
+If you want to jump directly to:
 
-### Save and recover
-
-- [Save a conversation and continue it](04-sessions-and-persistence.md)
-- [Recover tasks after a process restart](06-recovery.md)
-- [Control model input in long conversations](context-window.md)
-
-### Extend and integrate
-
-- [Give your agent a tool](07-extending.md)
-- [Put product policy at the right extension point](customize-runner.md)
-- [Integrate the example into your product](08-worked-example.md)
+- [Connect your own model](connect-model.md) — Replace the example’s model client and model configuration.
+- [Resume receiving results after disconnection](03-streaming-and-sse.md) — Connect client subscriptions and reconnection.
+- [Stop a task and accept user input](05-cancellation-and-suspension.md) — Handle stopping, suspension, and additional input.
+- [Save and continue conversations](04-sessions-and-persistence.md) — Persist conversations and run records.
+- [Recover tasks after a restart](06-recovery.md) — Complete recovery prerequisites and validation.
+- [Control model input in long conversations](context-window.md) — Configure history projection and summaries.
+- [Add tools to an agent](07-extending.md) — Register business functions and verify their results.
+- [Implement product policy at the right extension point](customize-runner.md) — Choose policy hooks such as tool gates.
+- [Integrate the example into a product](08-worked-example.md) — Complete the request path and check the integration.
 
 ### Details: responsibilities
 

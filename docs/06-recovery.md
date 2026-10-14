@@ -47,7 +47,11 @@ RunStore dispatch records and ToolContext's record_dispatch and resume_of provid
 
 ## Next steps
 
-Once recovery works, consider [long-conversation input](context-window.md). For exact storage capabilities, see the [API contract](api_surface.md).
+Next, read [Control model input in long conversations](context-window.md). Once conversations can be saved and recovered, plan the model’s input budget as history grows.
+
+If you want to jump directly to:
+
+- [API contract](api_surface.md) — Check the exact capabilities of storage interfaces.
 
 ## Code evidence
 

@@ -43,7 +43,13 @@ Turn these scenarios into your product's integration tests before expanding tool
 
 ## Next steps
 
-Learn now covers the complete path: run, integrate, preserve state, extend, and verify. Look up methods in the [API contract](api_surface.md), diagnose behavior in [errors and limits](errors-and-limits.md), and check [released changes](CHANGELOG.md) before upgrading.
+Next, open [Reference](reference.md). After verifying execution, integration, state retention, and extensions, use its question-based index to find parameters, limits, and version information.
+
+If you want to jump directly to:
+
+- [API contract](api_surface.md) — Look up methods and interface parameters.
+- [Errors and limits](errors-and-limits.md) — Diagnose runtime behavior.
+- [Released changes](CHANGELOG.md) — Confirm upgrade scope.
 
 ## Code evidence
 

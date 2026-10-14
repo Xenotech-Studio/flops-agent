@@ -54,7 +54,7 @@ ToolRegistry can manage tool packages, visibility, and execution routes. Introdu
 
 ## Next steps
 
-Add one refusal condition and verify that a denial returns to the model without executing the tool. Follow [the product-policy article](customize-runner.md) to complete that exercise.
+Next, read [Implement product policy at the right extension point](customize-runner.md) to add a refusal condition to the tool you just connected. Verify that a denial returns to the model without executing the tool.
 
 ## Code evidence
 

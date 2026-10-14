@@ -51,7 +51,7 @@ Send two turns with the same owner_id and session_id, reload, and inspect the me
 
 ## Next steps
 
-After storage works, test [restart recovery](06-recovery.md). Do not assume every tool can resume automatically.
+Next, read [Recover tasks after a restart](06-recovery.md) to verify how persisted records support recovery after interruption. Do not assume every tool can resume automatically.
 
 ## Code evidence
 

@@ -46,4 +46,9 @@ Code evidence: `src/flops_agent/providers/openai.py:116`; `src/flops_agent/tools
 
 ## Next steps
 
-Once you locate the problem, check parameters in the [API contract](api_surface.md). Add a reproducible integration scenario using [the product checklist](08-worked-example.md).
+Next, read the [Glossary](glossary.md). Align the state, object, and storage terms encountered during troubleshooting so you can interpret interfaces and diagnostic information accurately.
+
+If you want to jump directly to:
+
+- [API contract](api_surface.md) — Check interface parameters involved in the problem.
+- [Product integration checklist](08-worked-example.md) — Add reproducible integration scenarios.
