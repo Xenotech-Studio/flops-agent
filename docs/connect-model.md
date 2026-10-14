@@ -1,23 +1,27 @@
 # Connect your own model
 
-**Reader question:** How do I replace the offline model with a real service and verify the connection?
+In [Build your first app](01-quick-start.md), `llm` was your `PseudoLLMStreamClient`, which scripted the model’s replies. This page replaces it with real calls: start with the packaged client, then decide whether your provider’s interface needs your own implementation.
 
-**Prerequisites:** Complete [the execution walkthrough](02-core-concepts.md) and obtain access to a service with a compatible streaming Chat Completions endpoint. **Outcome:** Complete a request through your endpoint and distinguish network failures from runtime failures.
+## Start with the packaged client
 
-## Prepare the configuration
+Keep the virtual environment and `flops-agent[providers]==0.2.0` installation from 01; it includes the `httpx` used below. `OpenAIStreamClient` is the packaged streaming Chat Completions client. When a provider exposes a compatible API, reuse it and change environment variables to switch providers or models.
 
-The `.[providers]` installation in the quick start already includes the HTTP client. To install only the released package, use `python -m pip install 'flops-agent[providers]==0.2.0'`. Your product supplies the API key, model name, and base URL. The framework does not search the machine for configuration files.
+Inject your provider-issued key into `MODEL_API_KEY` through the runtime environment, not source code. Set the remaining configuration like this, replacing the placeholders before running:
 
-The program below reads `MODEL_API_KEY`, `MODEL_NAME`, and `MODEL_BASE_URL` from the environment. Set real values in your own runtime environment; do not put credentials in source code. Use the service's API root as the base URL, such as an address ending in `/v1`. Do not append `/chat/completions`: the client adds it.
+```sh
+export MODEL_PROVIDER=openai-compatible
+export MODEL_NAME=your-model-name
+export MODEL_BASE_URL=https://your-endpoint.example/v1
+```
 
-## Try it
+`MODEL_BASE_URL` is the API root; the client appends `/chat/completions`. The placeholder is not a working endpoint. Compatible endpoints must support the request fields and stream format used here; tool support needs separate verification.
 
-Save this as `model_check.py`, then run `python model_check.py`:
+First check connectivity. Save the following as `model_check.py` and run `python model_check.py` to check that a short reply arrives incrementally:
 
 ```python
 import asyncio
 import os
-from flops_agent import OpenAIStreamClient, Runtime, TextDelta, Error
+from flops_agent import Error, OpenAIStreamClient, Runtime, TextDelta
 
 async def main():
     client = OpenAIStreamClient(
@@ -25,8 +29,7 @@ async def main():
         model=os.environ["MODEL_NAME"],
         base_url=os.environ["MODEL_BASE_URL"],
     )
-    runtime = Runtime(llm=client)
-    async for event in runtime.ask("Introduce yourself in one sentence."):
+    async for event in Runtime(llm=client).ask("Reply with one short sentence."):
         if isinstance(event, TextDelta):
             print(event.text, end="", flush=True)
         elif isinstance(event, Error):
@@ -36,13 +39,128 @@ async def main():
 asyncio.run(main())
 ```
 
-`ask()` yields events directly and suits one-off scripts. To obtain a run_id, cursor, or stop handle, or to continue a conversation, use the previous article's `load_session()` -> `start()` -> `subscribe()` path.
+`Runtime.ask()` yields runtime events directly: `TextDelta.text` contains incremental text, and `Error.message` contains an error message. Missing environment variables cause `KeyError`; check your service configuration for authentication, model-name, or endpoint errors. Once connected, organize the client into a reusable application module.
 
-## Check the result
+## Implement your own client
 
-You should see a sentence arrive incrementally. A startup `KeyError` means an environment variable is missing. For authentication or unknown-model errors, check the service configuration first. For incompatible stream formats, check that the service actually provides compatible incremental responses. Text streaming support does not imply tool-call support; verify that separately with [the tool walkthrough](07-extending.md).
+Use the client seam when the provider has an incompatible API, requires a proprietary SDK, or needs your own retry, fallback, or per-request routing policy. The `PseudoLLMStreamClient` from 01 already fits this call shape. Replace its inner scripted stream with a real request and data conversion to create your own client; subclassing the packaged implementation is unnecessary.
 
-If you already have a custom client, its `async acompletion(**request)` must return an asynchronously iterable stream of chunks. Do not return a complete string or treat raw SSE bytes as framework events. Use LLMStreamClient and the existing provider adapter as references for boundary conversion.
+The method signature in PyPI 0.2.0’s `LLMStreamClient` is:
+
+```python
+async def acompletion(self, **completion_kwargs: object) -> AsyncIterator[StreamChunk]:
+    ...
+```
+
+The framework first calls `await client.acompletion(...)`, then asynchronously iterates the returned stream. The outer method therefore returns an async iterator, with `yield` inside an inner generator. Yield `StreamChunk` values such as `TextStreamChunk` or `ToolCallStreamChunk`; the runtime later converts them into events such as `TextDelta`. Do not return a complete string, raw network bytes, or runtime events.
+
+Save this adaptable HTTP client as `model_client.py`. To show where conversion happens, it uses an **illustrative endpoint contract**: send JSON containing fields such as `messages`, `tools`, and `model` to `/generate`; receive newline-delimited JSON (NDJSON), with one text or tool-call fragment per line and end-of-response marking the end of the stream. This is not a universal provider protocol. Adapt the request fields, authentication, and response conversion to your own API, or connect your SDK here.
+
+The two response-line shapes are shown below; tool arguments arrive as string fragments:
+
+```json
+{"type":"text","text":"A short reply."}
+{"type":"tool_call","index":0,"id":"call-1","name":"get_weather","arguments_delta":"{\"city\":\"Example City\"}"}
+```
+
+```python
+import json
+import os
+from typing import AsyncIterator
+
+import httpx
+from flops_agent import (
+    LLMStreamClient, OpenAIStreamClient, StreamChunk,
+    TextStreamChunk, ToolCallStreamChunk,
+)
+
+class MyClient:
+    def __init__(self, *, api_key: str, model: str, base_url: str):
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+
+    async def acompletion(self, **completion_kwargs: object) -> AsyncIterator[StreamChunk]:
+        request = dict(completion_kwargs)
+        request.setdefault("model", self.model)
+
+        async def stream() -> AsyncIterator[StreamChunk]:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST", f"{self.base_url}/generate",
+                    headers=headers, json=request,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        item = json.loads(line)
+                        if item["type"] == "text":
+                            yield TextStreamChunk(text=item["text"])
+                        elif item["type"] == "tool_call":
+                            yield ToolCallStreamChunk(
+                                index=item["index"], id=item.get("id"),
+                                name=item.get("name"),
+                                arguments_delta=item.get("arguments_delta"),
+                            )
+                        else:
+                            raise ValueError("Unsupported stream item type")
+        return stream()
+```
+
+This minimal implementation preserves a request-level `model`, using the constructor’s model only when it is absent. Tool-call `index`, `id`, `name`, and `arguments_delta` must correspond to incremental data for the same call; do not turn tool calls into ordinary text. Network, HTTP status, and parsing failures propagate, and cancellation is not swallowed.
+
+## Make providers and models switchable
+
+Append this factory to `model_client.py`. Without `MODEL_PROVIDER`, it selects the packaged client; `custom` selects your implementation. When switching, configure the corresponding URL, key, and model name together:
+
+```python
+def build_llm_client() -> LLMStreamClient:
+    settings = dict(
+        api_key=os.environ["MODEL_API_KEY"],
+        model=os.environ["MODEL_NAME"],
+        base_url=os.environ["MODEL_BASE_URL"],
+    )
+    provider = os.environ.get("MODEL_PROVIDER", "openai-compatible")
+    if provider == "custom":
+        return MyClient(**settings)
+    if provider == "openai-compatible":
+        return OpenAIStreamClient(**settings)
+    raise ValueError("Unsupported MODEL_PROVIDER")
+```
+
+The factory selects a client once during application assembly; it does not switch providers automatically for each request. For per-request provider or model selection, read the request’s `model` inside your own `acompletion`, use a product-defined mapping to select a client, and forward the request unchanged. Do not mutate a shared client’s defaults for concurrent requests. This example implements only the two factory branches above.
+
+## Connect it to your app
+
+Put `model_client.py` beside the `app.py` from 01 and replace its `build_runtime()` with the following. Keep the other imports, `get_weather`, and entry point from 01:
+
+```python
+import os
+from model_client import build_llm_client
+
+def build_runtime():
+    return Runtime(
+        agent=Agent(),
+        llm=build_llm_client(), tools=[get_weather],
+        database=InMemoryDatabase(), run_store=InMemoryRunStore(),
+        executor=DefaultToolExecutor(), runner=Runner,
+        model=os.environ["MODEL_NAME"],
+    )
+```
+
+This replaces both `llm=PseudoLLMStreamClient()` and `model="scripted-model"`. Runtime’s request-level model overrides the client’s default, so the old placeholder must not remain. The original `PseudoLLMStreamClient` class is now unused and can be removed.
+
+Run `python app.py` to check that the selected model requests the tool and uses its result in the answer. A real model need not reproduce the scripted output, and a successful text-only request does not establish tool-call compatibility. In your product, construct and reuse Runtime at startup and keep the `load_session()`, `start()`, and subscription path.
+
+## Boundaries
+
+Your product supplies credentials and configuration; the framework does not manage keys or discover credentials. Do not put keys in source code. The example URL is a placeholder: real calls require your own key and a working endpoint. Without a real key, you can verify construction, protocol adaptation, and local simulated calls, but cannot claim that a real provider has been verified.
+
+The example clients do not automatically retry or fall back. Provider retry, fallback, and routing policies belong to the product. Version 0.2.0 separately offers optional `Runtime.llm_stream_retry` to resend the current step when a stream call fails; it is disabled by default. It provides no cross-provider fallback and does not replace provider-specific client policy. Avoid duplicated retries across layers; retries after output has begun also need to handle duplicate content.
+
+The factory above is this example’s entire provider-selection logic; the framework has no built-in multi-provider router. The custom interface illustrates only text and tool calls. Adapt reasoning, finish reasons, or usage fields to the provider’s actual responses as needed. Tool execution and authorization remain product responsibilities.
 
 ## Next steps
 
@@ -54,6 +172,11 @@ If you want to jump directly to:
 
 ## Code evidence
 
-- `src/flops_agent/providers/openai.py:99`, `:116`: constructor arguments, streaming requests, and endpoint construction.
-- `src/flops_agent/seams/llm_client.py:18`: client protocol.
-- `src/flops_agent/engine/runtime.py:1218`: the events yielded by ask.
+These paths and line numbers come from the PyPI installation of `flops-agent==0.2.0`, relative to `site-packages/`, rather than the current source branch:
+
+- `flops_agent/seams/llm_client.py:17`: runtime-checkable `LLMStreamClient` protocol and method signature.
+- `flops_agent/providers/openai.py:99`, `:116`: constructor arguments, request-level model override, and streaming request conversion.
+- `flops_agent/entities/contracts.py:50`, `:66`: text and tool-call chunk fields.
+- `flops_agent/entities/events.py:37`, `:179`: `TextDelta` and `Error` runtime events.
+- `flops_agent/engine/runtime.py:147`, `:1218`: client and model injection, optional retry configuration, and `ask()` event output.
+- `flops_agent/engine/runner.py:392`: optional retry execution and cancellation propagation.
