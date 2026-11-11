@@ -20,6 +20,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   contracts for embedding applications.
 - Clarified neutral Session and tool-package extension points.
 
+### Removed
+
+- **Breaking:** the OpenAI/LiteLLM duck-shape fallback in `StreamAccumulator`.
+  `LLMStreamClient.acompletion` must now yield `StreamChunk` values; a provider
+  SDK object raises `TypeError` instead of being silently adapted. Translate
+  wire formats inside the client, as `OpenAIStreamClient` does.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

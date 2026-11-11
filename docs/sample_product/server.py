@@ -20,12 +20,16 @@ from flops_agent import (
     ToolGate,  # noqa: E402
     Agent,
     Contributor,
+    FinishStreamChunk,
     InMemoryDatabase,
     InMemoryRunStore,
     Query,
     Runner,
     Runtime,
     OpenAIStreamClient,
+    StreamChunk,
+    TextStreamChunk,
+    ToolCallStreamChunk,
     ToolContext,
 )
 
@@ -111,7 +115,7 @@ class ScriptedLLM:
     def __init__(self, script: List[Dict[str, Any]]):
         self._script, self._i = script, 0
 
-    async def acompletion(self, **request) -> Any:
+    async def acompletion(self, **request) -> AsyncIterator[StreamChunk]:
         turn = self._script[self._i]
         self._i += 1
         return _ScriptedStream(turn)
@@ -124,7 +128,7 @@ class _ScriptedStream:
     def __aiter__(self):
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> StreamChunk:
         if self._i >= len(self._chunks):
             raise StopAsyncIteration
         c = self._chunks[self._i]
@@ -132,20 +136,26 @@ class _ScriptedStream:
         return c
 
 
-def _turn_to_chunks(turn: Dict[str, Any]) -> list:
-    from types import SimpleNamespace as SN
+def _turn_to_chunks(turn: Dict[str, Any]) -> List[StreamChunk]:
+    """One scripted turn -> the chunks a provider would have streamed.
 
-    def _chunk(**delta):
-        return SN(choices=[SN(delta=SN(**{"content": None, "reasoning_content": None,
-                                          "tool_calls": None, **delta}),
-                              finish_reason=None, index=0)], usage=None)
-    out = [_chunk(content=p) for p in turn.get("chunks", [])]
-    for tc in turn.get("tool_calls", []):
-        out.append(_chunk(tool_calls=[SN(index=0, id=tc["id"], type="function",
-                                         function=SN(name=tc["name"],
-                                                     arguments=json.dumps(tc["arguments"])))]))
+    The LLM seam speaks ``StreamChunk``, so there is no provider wire format to
+    imitate: visible text is a ``TextStreamChunk``, each function call is a
+    ``ToolCallStreamChunk`` (``index`` tells parallel calls apart), and the
+    stream ends with a ``FinishStreamChunk``. A real client translates its
+    provider's frames into the same four -- see ``OpenAIStreamClient``.
+    """
+    out: List[StreamChunk] = [TextStreamChunk(piece) for piece in turn.get("chunks", [])]
+    for index, tc in enumerate(turn.get("tool_calls", [])):
+        out.append(ToolCallStreamChunk(
+            index=index,
+            id=tc["id"],
+            name=tc["name"],
+            arguments_delta=json.dumps(tc["arguments"]),
+        ))
     if turn.get("content"):
-        out.append(_chunk(content=turn["content"]))
+        out.append(TextStreamChunk(turn["content"]))
+    out.append(FinishStreamChunk(reason="stop"))
     return out
 
 

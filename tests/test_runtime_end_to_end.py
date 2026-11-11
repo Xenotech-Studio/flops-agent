@@ -11,7 +11,6 @@ tools; touches neither the network nor a database.
 import asyncio
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -27,20 +26,15 @@ from flops_agent import (  # noqa: E402
     SessionRunActiveError,
 )
 from flops_agent.entities import events as ev  # noqa: E402
+from conftest import text_chunk, tool_chunk  # noqa: E402
 
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def chunk(**delta):
-    d = {"content": None, "reasoning_content": None, "tool_calls": None, **delta}
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None)], usage=None)
 
 
-def tool_chunk(index=0, cid="c1", name=None, args=None):
-    return chunk(tool_calls=[SN(index=index, id=cid, type="function",
-                                function=SN(name=name, arguments=args))])
 
 
 class FakeLLM:
@@ -71,7 +65,7 @@ def get_weather(city):
 
 def test_minimal_path_three_lines():
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="Hello"), chunk(content="world")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("Hello"), text_chunk("world")]))
         got = [e async for e in runtime.ask("You there?")]
         texts = [e.text for e in got if isinstance(e, ev.TextDelta)]
         assert texts == ["Hello", "world"]
@@ -83,7 +77,7 @@ def test_minimal_path_three_lines():
 def test_ask_yields_events_not_deliveries():
     """A one-shot Q&A never reconnects, so a cursor is dead weight — hand back events directly."""
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("hi")]))
         first = None
         async for e in runtime.ask("x"):
             first = e
@@ -97,7 +91,7 @@ def test_ask_yields_events_not_deliveries():
 
 def test_multi_turn_accumulates_history():
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="A")], [chunk(content="B")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("A")], [text_chunk("B")]))
         session = Session("s1")
         for text in ("First question", "Second question"):
             run = runtime.start(session, Query.text(text))
@@ -114,7 +108,7 @@ def test_multi_turn_accumulates_history():
 def test_start_rejects_an_active_session_run_before_creating_another():
     """start() promises an already-started Run, so it never silently queues one."""
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="first")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("first")]))
         session = Session("s1")
         first = runtime.start(session, Query.text("one"))
         try:
@@ -132,7 +126,7 @@ def test_start_rejects_an_active_session_run_before_creating_another():
 def test_empty_query_continues_from_state():
     """No Query = continue from the current state. If the last message is a half-finished reply, continue writing it in place rather than appending a new one."""
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content=" second half")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk(" second half")]))
         session = Session("s1", messages=[
             {"role": "user", "content": "q"},
             {"role": "assistant", "content": "first half"},
@@ -148,7 +142,7 @@ def test_empty_query_continues_from_state():
 def test_regenerate_is_truncate_plus_run():
     """Regenerate isn't a kind of Query — it's two steps: "truncate history" then "run with no input"."""
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="new answer")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("new answer")]))
         session = Session("s1", messages=[
             {"external_id": "u1", "role": "user", "content": "q"},
             {"external_id": "a1", "role": "assistant", "content": "old answer"},
@@ -168,7 +162,7 @@ def test_tool_call_round_trip():
         runtime = Runtime(
             llm=FakeLLM(
                 [tool_chunk(name="get_weather", args='{"city": "Paris"}')],
-                [chunk(content="Paris is 21 degrees")],
+                [text_chunk("Paris is 21 degrees")],
             ),
             tools=[get_weather],
         )
@@ -185,7 +179,7 @@ def test_tool_call_round_trip():
 
 def test_tool_schema_derived_from_callable():
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="ok")]), tools=[get_weather])
+        runtime = Runtime(llm=FakeLLM([text_chunk("ok")]), tools=[get_weather])
         run = runtime.start(Session("s1"), Query.text("x"))
         await run.wait()
         schemas = runtime.llm.last_request["tools"]
@@ -206,7 +200,7 @@ def test_subclass_overrides_a_step():
             return request
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="ok")]), runner=MyRunner)
+        runtime = Runtime(llm=FakeLLM([text_chunk("ok")]), runner=MyRunner)
         run = runtime.start(Session("s1"), Query.text("hi"))
         await run.wait()
         assert runtime.llm.last_request["messages"][0]["role"] == "system"
@@ -231,7 +225,7 @@ def test_subclass_state_lives_on_self():
 
     async def go():
         runtime = Runtime(
-            llm=FakeLLM([chunk(content="a"), chunk(content="b"), chunk(content="c")]),
+            llm=FakeLLM([text_chunk("a"), text_chunk("b"), text_chunk("c")]),
             runner=CountingRunner,
         )
         run = runtime.start(Session("s1"), Query.text("x"))
@@ -249,7 +243,7 @@ def test_before_tool_can_deny():
     async def go():
         runtime = Runtime(
             llm=FakeLLM([tool_chunk(name="get_weather", args='{"city":"X"}')],
-                        [chunk(content="OK")]),
+                        [text_chunk("OK")]),
             tools=[get_weather], runner=GatedRunner,
         )
         run = runtime.start(Session("s1"), Query.text("q"))
@@ -279,7 +273,7 @@ class BlockingLLM:
         async def gen():
             self.entered.set()
             await self.gate.wait()          # actually suspends here
-            yield chunk(content="late")
+            yield text_chunk("late")
         return gen()
 
 
@@ -307,7 +301,7 @@ def test_stop_unknown_session_returns_false():
 def test_second_client_reconnects_by_cursor():
     """After a run finishes, another client can still catch up on history — proof that execution and subscription are decoupled."""
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="a"), chunk(content="b")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("a"), text_chunk("b")]))
         run = runtime.start(Session("s1"), Query.text("q"))
         first = [d async for d in run]                  # the first client receives everything
         assert len(first) >= 2
@@ -319,7 +313,7 @@ def test_second_client_reconnects_by_cursor():
 
 def test_run_leaves_pool_when_finished():
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="x")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("x")]))
         run = runtime.start(Session("s1"), Query.text("q"))
         await run.wait()
         await asyncio.sleep(0)
@@ -349,7 +343,7 @@ def test_tool_exception_becomes_error_result():
 
     async def go():
         runtime = Runtime(
-            llm=FakeLLM([tool_chunk(name="boom", args="{}")], [chunk(content="Got it")]),
+            llm=FakeLLM([tool_chunk(name="boom", args="{}")], [text_chunk("Got it")]),
             tools=[boom],
         )
         run = runtime.start(Session("s1"), Query.text("q"))

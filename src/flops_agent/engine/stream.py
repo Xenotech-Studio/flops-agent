@@ -7,10 +7,10 @@ stream ends, ``tool_calls()`` returns OpenAI-shaped call objects.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import cast
 
 from flops_agent.entities import events as _ev
 from flops_agent.entities.contracts import (
+    FinishStreamChunk,
     ReasoningStreamChunk,
     StreamChunk,
     TextStreamChunk,
@@ -35,11 +35,7 @@ class StreamAccumulator:
         self._named: set[int] = set()
 
     def feed(self, chunk: StreamChunk) -> Iterator[_ev.AgentEvent]:
-        """Consume one public :data:`StreamChunk`.
-
-        The fallback preserves source compatibility for pre-contract custom
-        clients while the annotated extension boundary requires StreamChunk.
-        """
+        """Consume one public :data:`StreamChunk`."""
         if isinstance(chunk, TextStreamChunk):
             self.text += chunk.text
             yield _ev.TextDelta(chunk.text)
@@ -51,7 +47,20 @@ class StreamAccumulator:
         if isinstance(chunk, ToolCallStreamChunk):
             yield from self._feed_tool_call(chunk)
             return
-        yield from self._feed_legacy(cast(object, chunk))
+        # Only FinishStreamChunk is left statically, so the check below is a
+        # runtime guard, not a type narrowing: annotations do not stop a custom
+        # client from yielding a provider SDK object. Say so loudly instead of
+        # dropping the model's output on the floor.
+        if not isinstance(chunk, FinishStreamChunk):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                "LLMStreamClient.acompletion must yield StreamChunk values "
+                "(TextStreamChunk / ReasoningStreamChunk / ToolCallStreamChunk / "
+                f"FinishStreamChunk); got {type(chunk).__module__}.{type(chunk).__name__}. "
+                "Provider wire formats are translated inside the client -- see "
+                "flops_agent.providers.openai.OpenAIStreamClient."
+            )
+        # FinishStreamChunk carries terminal telemetry only (finish_reason /
+        # usage, read by Runner.on_chunk); it produces no events.
 
     def _feed_tool_call(self, chunk: ToolCallStreamChunk) -> Iterator[_ev.AgentEvent]:
         slot = self._tc.setdefault(chunk.index, ToolCall(function=ToolFunction(arguments="")))
@@ -65,47 +74,6 @@ class StreamAccumulator:
         if chunk.arguments_delta:
             slot.function.arguments += chunk.arguments_delta
             yield _ev.ToolCallArgsDelta(chunk.index, chunk.arguments_delta)
-
-    def _feed_legacy(self, chunk: object) -> Iterator[_ev.AgentEvent]:
-        """Adapt the former OpenAI/LiteLLM duck shape during API migration."""
-        choices = getattr(chunk, "choices", None)
-        if not choices:
-            return
-        delta = getattr(choices[0], "delta", None)
-        if delta is None:
-            return
-
-        content = getattr(delta, "content", None)
-        if content:
-            self.text += content
-            yield _ev.TextDelta(content)
-
-        reasoning = getattr(delta, "reasoning_content", None)
-        if reasoning:
-            self.reasoning += reasoning
-            yield _ev.ReasoningDelta(reasoning, phase="delta")
-
-        tcs = getattr(delta, "tool_calls", None)
-        if not tcs:
-            return
-        for tc in tcs:
-            idx = getattr(tc, "index", None) or 0
-            slot = self._tc.setdefault(idx, ToolCall(function=ToolFunction(arguments="")))
-            if getattr(tc, "id", None):
-                slot.id = tc.id
-            fn = getattr(tc, "function", None)
-            if fn is None:
-                continue
-            name = getattr(fn, "name", None)
-            if name:
-                slot.function.name += name
-                if idx not in self._named:
-                    self._named.add(idx)
-                    yield _ev.ToolCallStarted(idx, slot.function.name)
-            args = getattr(fn, "arguments", None)
-            if args:
-                slot.function.arguments += args
-                yield _ev.ToolCallArgsDelta(idx, args)
 
     def tool_calls(self) -> list[ToolCall]:
         return [slot for _, slot in sorted(self._tc.items())]

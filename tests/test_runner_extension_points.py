@@ -22,20 +22,15 @@ sys.path.insert(0, os.path.join(_HERE, ".."))
 from flops_agent import Query, RunStatus, Runner, Runtime, Session  # noqa: E402
 from flops_agent.entities import events as ev  # noqa: E402
 from flops_agent.engine.interaction import UNSET, Interaction, StepPlan  # noqa: E402
+from conftest import text_chunk, tool_chunk  # noqa: E402
 
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def chunk(**delta):
-    d = {"content": None, "reasoning_content": None, "tool_calls": None, **delta}
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None)], usage=None)
 
 
-def tool_chunk(name, args="{}", index=0, cid="c1"):
-    return chunk(tool_calls=[SN(index=index, id=cid, type="function",
-                                function=SN(name=name, arguments=args))])
 
 
 def call_obj(name, args="{}", cid="c1"):
@@ -78,7 +73,7 @@ def test_plan_step_can_dispatch_without_llm():
             return StepPlan.call_llm()
 
     async def go():
-        llm = FakeLLM([chunk(content="got it")])
+        llm = FakeLLM([text_chunk("got it")])
         runtime = Runtime(llm=llm, tools=[ping], runner=ResumeRunner)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
@@ -95,7 +90,7 @@ def test_plan_step_can_finish_immediately():
             async def plan_step(self):
                 return StepPlan.finish("nothing_to_do")
 
-        llm = FakeLLM([chunk(content="never")])
+        llm = FakeLLM([text_chunk("never")])
         run = Runtime(llm=llm, runner=StopRunner).start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
         assert llm.calls == 0
@@ -120,7 +115,7 @@ def test_on_stream_end_runs_before_reply_is_built():
             return await super().build_reply()
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]), runner=AccountingRunner)
+        runtime = Runtime(llm=FakeLLM([text_chunk("hi")]), runner=AccountingRunner)
         await Runtime.start(runtime, Session("s1"), Query.text("q")).wait()
         assert order == [("stream_end", "hi"), ("build_reply", "hi")]
     _run(go())
@@ -140,7 +135,7 @@ def test_on_stream_open_runs_after_request_before_first_chunk():
             await super().on_chunk(raw_chunk)
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]), runner=OpeningRunner)
+        runtime = Runtime(llm=FakeLLM([text_chunk("hi")]), runner=OpeningRunner)
         await runtime.start(Session("s1"), Query.text("q")).wait()
         assert order == ["open", "chunk"]
 
@@ -168,7 +163,7 @@ def test_before_llm_call_runs_before_acompletion_and_on_stream_open():
             await super().on_chunk(raw_chunk)
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]), runner=BeforeCallRunner)
+        runtime = Runtime(llm=FakeLLM([text_chunk("hi")]), runner=BeforeCallRunner)
         await runtime.start(Session("s1"), Query.text("q")).wait()
         assert order == ["before_call", "open", "chunk"]
 
@@ -189,7 +184,7 @@ def test_prepare_dispatch_can_insert_prerequisite_call():
 
     async def go():
         runtime = Runtime(
-            llm=FakeLLM([tool_chunk("ping")], [chunk(content="done")]),
+            llm=FakeLLM([tool_chunk("ping")], [text_chunk("done")]),
             tools=[ping, opener], runner=InjectingRunner,
         )
         run = runtime.start(Session("s1"), Query.text("q"))
@@ -214,7 +209,7 @@ def test_prepare_dispatch_skipped_when_no_tool_calls():
             return None
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="plain text")]), runner=Watcher)
+        runtime = Runtime(llm=FakeLLM([text_chunk("plain text")]), runner=Watcher)
         await runtime.start(Session("s1"), Query.text("q")).wait()
         assert called == []
     _run(go())
@@ -223,7 +218,7 @@ def test_prepare_dispatch_skipped_when_no_tool_calls():
 
 def test_prepare_dispatch_none_keeps_original():
     async def go():
-        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [chunk(content="x")]),
+        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [text_chunk("x")]),
                           tools=[ping])
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
@@ -241,7 +236,7 @@ def test_after_execute_can_suspend_the_run():
             return Interaction.suspend(kind="confirm", tool=call.function.name)
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [chunk(content="never")]),
+        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [text_chunk("never")]),
                           tools=[ping], runner=SuspendingRunner)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
@@ -263,7 +258,7 @@ def test_after_execute_can_wait_in_place():
             return Interaction.wait_for(waiter())
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [chunk(content="ok")]),
+        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [text_chunk("ok")]),
                           tools=[ping], runner=WaitingRunner)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
@@ -281,7 +276,7 @@ def test_after_execute_can_replace_result():
             return Interaction.proceed(result={"replaced": True})
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [chunk(content="x")]),
+        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [text_chunk("x")]),
                           tools=[ping], runner=ReplacingRunner)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
@@ -303,11 +298,9 @@ def test_suspend_stops_remaining_tool_calls():
             return Interaction.suspend(at=index) if index == 0 else Interaction.proceed()
 
     async def go():
-        two = chunk(tool_calls=[
-            SN(index=0, id="c1", type="function", function=SN(name="ping", arguments="{}")),
-            SN(index=1, id="c2", type="function", function=SN(name="opener", arguments="{}")),
-        ])
-        runtime = Runtime(llm=FakeLLM([two], [chunk(content="x")]),
+        two = [tool_chunk("ping", cid="c1"),
+               tool_chunk("opener", index=1, cid="c2")]
+        runtime = Runtime(llm=FakeLLM(two, [text_chunk("x")]),
                           tools=[ping, opener], runner=SuspendFirstRunner)
         run = runtime.start(Session("s1"), Query.text("q"))
         await run.wait()
@@ -335,7 +328,7 @@ def test_lifecycle_points_fire_in_order():
             seen.append("step_end")
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [chunk(content="done")]),
+        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [text_chunk("done")]),
                           tools=[ping], runner=TracingRunner)
         await runtime.start(Session("s1"), Query.text("q")).wait()
         # step_end fires on every step (a plain-text wrap-up step still needs to
@@ -368,7 +361,7 @@ def test_on_cancelled_runs_before_terminal_event():
                 async def gen():
                     entered.set()
                     await gate.wait()
-                    yield chunk(content="late")
+                    yield text_chunk("late")
                 return gen()
 
         runtime = Runtime(llm=Blocking(), runner=CancelAwareRunner)
@@ -388,7 +381,7 @@ def test_product_events_reach_subscribers():
             await self.emit(ev.ProductEvent("entry", {"type": "entry", "n": 1}))
 
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="x")]), runner=FramingRunner)
+        runtime = Runtime(llm=FakeLLM([text_chunk("x")]), runner=FramingRunner)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
         entry = [e for e in events if isinstance(e, ev.ProductEvent)]

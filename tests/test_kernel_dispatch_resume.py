@@ -6,7 +6,6 @@ import asyncio
 import json
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -14,17 +13,13 @@ sys.path.insert(0, os.path.join(_HERE, ".."))
 from flops_agent import InMemoryDatabase, InMemoryRunStore, Query, Runtime, ToolRegistry  # noqa: E402
 from flops_agent.engine.execution import RunStatus  # noqa: E402
 from flops_agent.entities import events as ev  # noqa: E402
+from conftest import text_chunk, tool_chunk  # noqa: E402
 
 
 def _tool(name):
     return {"type": "function", "function": {"name": name, "description": name, "parameters": {"type": "object", "properties": {}}}}
 
 
-def _chunk(content=None, calls=None):
-    d = {"content": content, "reasoning_content": None, "tool_calls": None}
-    if calls:
-        d["tool_calls"] = [SN(index=i, id=cid, type="function", function=SN(name=n, arguments=json.dumps(a))) for i, (cid, n, a) in enumerate(calls)]
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None, index=0)], usage=None)
 
 
 class ScriptedLLM:
@@ -60,7 +55,7 @@ def test_dispatch_is_recorded_then_resumed_without_llm():
             await release.wait()
             return {"ok": True}
 
-        llm = ScriptedLLM([_chunk(calls=[("c1", "slow", {})])], [_chunk(content="done")])
+        llm = ScriptedLLM([tool_chunk("slow", {}, cid="c1")], [text_chunk("done")])
         rt = Runtime(llm=llm, registry=_registry(slow), database=db, run_store=store)
         s = await rt.load_session("s1", owner_id="u1")
         run = rt.start(s, Query.text("go"))
@@ -92,7 +87,7 @@ def test_dispatch_is_recorded_then_resumed_without_llm():
             seen.append(dict(ctx.resume_of or {}))
             return {"ok": True, "resumed": True}
 
-        llm2 = ScriptedLLM([_chunk(content="done")])
+        llm2 = ScriptedLLM([text_chunk("done")])
         rt2 = Runtime(llm=llm2, registry=_registry(slow_again), database=db, run_store=store)
         s2 = await rt2.load_session("s1", owner_id="u1")
         run2 = rt2.start(s2, run_id=run.id)
@@ -119,7 +114,7 @@ def test_no_records_means_no_resume_and_answer_takes_precedence():
 
         # The tail message is assistant.tool_calls but with no record (e.g. the tool already
         # finished and the history tail just happens to look this way) -> ask the model as usual
-        llm = ScriptedLLM([_chunk(content="hi")])
+        llm = ScriptedLLM([text_chunk("hi")])
         rt = Runtime(llm=llm, registry=_registry(slow), database=db, run_store=store)
         s = await rt.load_session("s1", owner_id="u1")
         s.append({"role": "user", "content": "x"})
@@ -139,7 +134,7 @@ def test_no_records_means_no_resume_and_answer_takes_precedence():
             def get_meta(self, *a): return None
             def get_latest_run_id(self, *a): return ""
             def buffer_range(self, *a): return []
-        llm2 = ScriptedLLM([_chunk(content="hi")])
+        llm2 = ScriptedLLM([text_chunk("hi")])
         rt2 = Runtime(llm=llm2, registry=_registry(slow), database=InMemoryDatabase(), run_store=Minimal())
         s2 = await rt2.load_session("s2", owner_id="u1")
         run2 = rt2.start(s2, Query.text("go"))

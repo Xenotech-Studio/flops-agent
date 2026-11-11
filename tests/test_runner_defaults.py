@@ -15,7 +15,6 @@ only touched the tail this time."
 import asyncio
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -23,20 +22,15 @@ sys.path.insert(0, os.path.join(_HERE, ".."))
 from flops_agent import Query, Runner, Runtime, Session  # noqa: E402
 from flops_agent.entities import events as ev  # noqa: E402
 from flops_agent.seams.database import InMemoryDatabase, sync_session  # noqa: E402
+from conftest import text_chunk, tool_chunk  # noqa: E402
 
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def chunk(**delta):
-    d = {"content": None, "reasoning_content": None, "tool_calls": None, **delta}
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None)], usage=None)
 
 
-def tool_chunk(name, args="{}"):
-    return chunk(tool_calls=[SN(index=0, id="c1", type="function",
-                                function=SN(name=name, arguments=args))])
 
 
 class FakeLLM:
@@ -80,7 +74,7 @@ def test_persists_without_product_writing_any_code():
     async def go():
         db = InMemoryDatabase()
         db.create_session("s1")
-        runtime = Runtime(llm=FakeLLM([chunk(content="answer")]), database=db)
+        runtime = Runtime(llm=FakeLLM([text_chunk("answer")]), database=db)
         await runtime.start(Session("s1"), Query.text("question")).wait()
         stored = db.load_messages("s1")
         assert [m["content"] for m in stored] == ["question", "answer"]
@@ -101,7 +95,7 @@ def test_persists_after_each_step_not_only_at_end():
         db = InMemoryDatabase()
         db.create_session("s1")
         runtime = Runtime(
-            llm=FakeLLM([tool_chunk("ping")], [tool_chunk("ping")], [chunk(content="done")]),
+            llm=FakeLLM([tool_chunk("ping")], [tool_chunk("ping")], [text_chunk("done")]),
             tools=[ping], database=db, runner=CrashAfterSecondStep,
         )
         await runtime.start(Session("s1"), Query.text("q")).wait()
@@ -122,7 +116,7 @@ def test_persists_even_when_stopped():
                 async def gen():
                     entered.set()
                     await gate.wait()
-                    yield chunk(content="late")
+                    yield text_chunk("late")
                 return gen()
 
         runtime = Runtime(llm=Blocking(), database=db)
@@ -139,7 +133,7 @@ def test_persists_even_when_stopped():
 def test_no_database_is_fine():
     """Runs fine without a configured database -- the minimal path shouldn't be forced to set up storage first."""
     async def go():
-        runtime = Runtime(llm=FakeLLM([chunk(content="hi")]))
+        runtime = Runtime(llm=FakeLLM([text_chunk("hi")]))
         await runtime.start(Session("s1"), Query.text("q")).wait()
     _run(go())
     print("test_no_database_is_fine OK")
@@ -153,7 +147,7 @@ def test_only_the_delta_is_written():
         db = RecordingDatabase()
         db.create_session("s1")
         session = Session("s1")
-        runtime = Runtime(llm=FakeLLM([chunk(content="A")], [chunk(content="B")]),
+        runtime = Runtime(llm=FakeLLM([text_chunk("A")], [text_chunk("B")]),
                           database=db)
         await runtime.start(session, Query.text("one")).wait()
         await runtime.start(session, Query.text("two")).wait()
@@ -185,7 +179,7 @@ def test_history_changed_is_emitted_with_revision():
     async def go():
         db = InMemoryDatabase()
         db.create_session("s1")
-        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [chunk(content="done")]),
+        runtime = Runtime(llm=FakeLLM([tool_chunk("ping")], [text_chunk("done")]),
                           tools=[ping], database=db)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]
@@ -212,7 +206,7 @@ def test_pending_input_continues_the_turn():
 
     async def go():
         QueuedRunner.delivered = False
-        llm = FakeLLM([chunk(content="first answer")], [chunk(content="second answer")])
+        llm = FakeLLM([text_chunk("first answer")], [text_chunk("second answer")])
         runtime = Runtime(llm=llm, runner=QueuedRunner)
         session = Session("s1")
         await runtime.start(session, Query.text("question")).wait()
@@ -226,7 +220,7 @@ def test_pending_input_continues_the_turn():
 
 def test_no_pending_input_ends_the_turn():
     async def go():
-        llm = FakeLLM([chunk(content="answer")], [chunk(content="should not happen")])
+        llm = FakeLLM([text_chunk("answer")], [text_chunk("should not happen")])
         await Runtime(llm=llm).start(Session("s1"), Query.text("q")).wait()
         assert llm.calls == 1
     _run(go())
@@ -244,7 +238,7 @@ def test_override_smaller_method_keeps_persistence():
     async def go():
         db = InMemoryDatabase()
         db.create_session("s1")
-        runtime = Runtime(llm=FakeLLM([chunk(content="a")]), database=db,
+        runtime = Runtime(llm=FakeLLM([text_chunk("a")]), database=db,
                           runner=CustomNotify)
         run = runtime.start(Session("s1"), Query.text("q"))
         events = [d.event async for d in run]

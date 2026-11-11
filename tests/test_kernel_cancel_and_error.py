@@ -11,7 +11,6 @@ exception text; the host can override it with a user-facing message.
 import asyncio
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -19,15 +18,13 @@ sys.path.insert(0, os.path.join(_HERE, ".."))
 from flops_agent import Query, Runner, Runtime, Session  # noqa: E402
 from flops_agent.engine.execution import RunStatus  # noqa: E402
 from flops_agent.entities import events as ev  # noqa: E402
+from conftest import reasoning_chunk, text_chunk  # noqa: E402
 
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def chunk(**delta):
-    d = {"content": None, "reasoning_content": None, "tool_calls": None, **delta}
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None)], usage=None)
 
 
 class SlowLLM:
@@ -37,7 +34,7 @@ class SlowLLM:
         async def gen():
             for i in range(50):
                 await asyncio.sleep(0.05)
-                yield chunk(content=f"chunk{i}")
+                yield text_chunk(f"chunk{i}")
         return gen()
 
 

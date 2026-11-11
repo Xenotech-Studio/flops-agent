@@ -3,7 +3,6 @@ import asyncio
 import json
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -12,17 +11,13 @@ from flops_agent import (  # noqa: E402
     Contributor, InMemoryDatabase, Query, Runtime, Session, ToolRegistry, register_package_navigation,
 )
 from flops_agent.entities import events as ev  # noqa: E402
+from conftest import text_chunk, tool_chunk  # noqa: E402
 
 
 def _tool(name):
     return {"type": "function", "function": {"name": name, "description": name, "parameters": {"type": "object", "properties": {}}}}
 
 
-def _chunk(content=None, calls=None):
-    d = {"content": content, "reasoning_content": None, "tool_calls": None}
-    if calls:
-        d["tool_calls"] = [SN(index=i, id=f"c{i}", type="function", function=SN(name=n, arguments=json.dumps(a))) for i, (n, a) in enumerate(calls)]
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None, index=0)], usage=None)
 
 
 class ScriptedLLM:
@@ -78,9 +73,9 @@ def test_navigation_tools_run_inside_the_kernel_loop():
     framework's default executor and registry, no host code needed."""
     async def go():
         llm = ScriptedLLM(
-            [_chunk(calls=[("open_packages", {"package_paths": ["/tools/weather"]})])],
-            [_chunk(calls=[("get_weather", {"city": "Beijing"})])],
-            [_chunk(content="It's 26 degrees in Beijing.")],
+            [tool_chunk("open_packages", {"package_paths": ["/tools/weather"]}, cid="c0")],
+            [tool_chunk("get_weather", {"city": "Beijing"}, cid="c0")],
+            [text_chunk("It's 26 degrees in Beijing.")],
         )
         rt = Runtime(llm=llm, registry=_registry(), database=InMemoryDatabase())
         s = await rt.load_session("s1", owner_id="u1")
@@ -99,7 +94,7 @@ def test_navigation_tools_run_inside_the_kernel_loop():
 
 def test_tool_in_unopened_package_is_gated():
     async def go():
-        llm = ScriptedLLM([_chunk(calls=[("get_weather", {})])], [_chunk(content="OK.")])
+        llm = ScriptedLLM([tool_chunk("get_weather", {}, cid="c0")], [text_chunk("OK.")])
         rt = Runtime(llm=llm, registry=_registry(), database=InMemoryDatabase())
         s = await rt.load_session("s1", owner_id="u1")
         run = rt.start(s, Query(content="weather", by=Contributor.USER))
@@ -183,7 +178,7 @@ def test_runner_hooks_drive_visibility_into_the_request():
             async def acompletion(self, **req):
                 seen["tools"] = [t["function"]["name"] for t in req.get("tools") or []]
                 async def gen():
-                    yield _chunk(content="ok")
+                    yield text_chunk("ok")
                 return gen()
         for cls in (Offline, Online):
             rt = Runtime(llm=Capture(), registry=reg, database=InMemoryDatabase(), runner=cls)

@@ -25,19 +25,16 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from flops_agent import Runtime, InMemoryDatabase, Session  # noqa: E402
+from conftest import finish_chunk, text_chunk  # noqa: E402
 
 
-def _chunk(content=None, finish=None):
-    delta = SimpleNamespace(content=content, reasoning_content=None, tool_calls=None)
-    return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=finish)],
-                           usage=None)
 
 
 class OneShotLLM:
     async def acompletion(self, **kw):
         async def _stream():
-            yield _chunk(content="done")
-            yield _chunk(finish="stop")
+            yield text_chunk("done")
+            yield finish_chunk("stop")
         return _stream()
 
 
@@ -172,8 +169,8 @@ def test_suspend_run_auto_marks_at_drive_end():
     class SuspendingLLM:
         async def acompletion(self, **kw):
             async def _stream():
-                yield _chunk(content="need you to decide")
-                yield _chunk(finish="stop")
+                yield text_chunk("need you to decide")
+                yield finish_chunk("stop")
             return _stream()
 
     from flops_agent import Runner as _Runner

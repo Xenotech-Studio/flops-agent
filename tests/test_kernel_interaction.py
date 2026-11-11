@@ -5,7 +5,6 @@ import asyncio
 import json
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -16,17 +15,13 @@ from flops_agent import (  # noqa: E402
 from flops_agent.engine.execution import RunStatus  # noqa: E402
 from flops_agent.engine.interaction import InteractionRequest  # noqa: E402
 from flops_agent.entities import events as ev  # noqa: E402
+from conftest import text_chunk, tool_chunk  # noqa: E402
 
 
 def _tool(name):
     return {"type": "function", "function": {"name": name, "description": name, "parameters": {"type": "object", "properties": {}}}}
 
 
-def _chunk(content=None, calls=None):
-    d = {"content": content, "reasoning_content": None, "tool_calls": None}
-    if calls:
-        d["tool_calls"] = [SN(index=i, id=cid, type="function", function=SN(name=n, arguments=json.dumps(a))) for i, (cid, n, a) in enumerate(calls)]
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None, index=0)], usage=None)
 
 
 class ScriptedLLM:
@@ -62,8 +57,9 @@ def test_ask_suspends_and_answer_resumes():
     async def go():
         db = InMemoryDatabase()
         llm = ScriptedLLM(
-            [_chunk(calls=[("c1", "ask_user_question", QUESTION), ("c2", "ping", {})])],   # second call never gets to run -> trimmed off on suspend
-            [_chunk(content="OK, continuing.")],
+            [tool_chunk("ask_user_question", QUESTION, cid="c1"),
+             tool_chunk("ping", {}, index=1, cid="c2")],   # second call never gets to run -> trimmed off on suspend
+            [text_chunk("OK, continuing.")],
         )
         rt = Runtime(llm=llm, registry=_registry(), database=db)
         s = await rt.load_session("s1", owner_id="u1")
@@ -103,7 +99,7 @@ def test_ask_suspends_and_answer_resumes():
 
 def test_answer_without_pending_or_twice_is_a_noop():
     async def go():
-        llm = ScriptedLLM([_chunk(content="never")])
+        llm = ScriptedLLM([text_chunk("never")])
         rt = Runtime(llm=llm, registry=_registry(), database=InMemoryDatabase())
         s = await rt.load_session("s1", owner_id="u1")
         run = rt.start(s, Query(content="yes", by=Contributor.ANSWER))
@@ -129,7 +125,7 @@ def test_host_resolves_other_interaction_kinds():
                     return None
                 return await super().resolve_interaction(pending, query)
 
-        llm = ScriptedLLM([_chunk(calls=[("d1", "deploy", {})])], [_chunk(content="done")])
+        llm = ScriptedLLM([tool_chunk("deploy", {}, cid="d1")], [text_chunk("done")])
         rt = Runtime(llm=llm, registry=_registry(), database=InMemoryDatabase(), runner=Host)
         s = await rt.load_session("s1", owner_id="u1")
         run = rt.start(s, Query(content="deploy", by=Contributor.USER))
@@ -158,8 +154,9 @@ def test_suspend_persists_truncation_and_answer_rebuilds_missing_call():
     async def go():
         db = InMemoryDatabase()
         llm = ScriptedLLM(
-            [_chunk(calls=[("c1", "ask_user_question", QUESTION), ("c2", "ping", {})])],
-            [_chunk(content="Continuing.")],
+            [tool_chunk("ask_user_question", QUESTION, cid="c1"),
+             tool_chunk("ping", {}, index=1, cid="c2")],
+            [text_chunk("Continuing.")],
         )
         rt = Runtime(llm=llm, registry=_registry(), database=db)
         s = await rt.load_session("s1", owner_id="u1")

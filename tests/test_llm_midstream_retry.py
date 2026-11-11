@@ -1,16 +1,13 @@
 """Framework contract for automatically retrying an LLM stream that fails mid-flight."""
 
 import asyncio
-from types import SimpleNamespace as SN
 
 from flops_agent import Query, RunStatus, Runtime, Session
 from flops_agent.engine.runtime import LLMStreamRetryPolicy
 from flops_agent.entities import events as ev
+from conftest import text_chunk  # noqa: E402
 
 
-def chunk(**delta):
-    values = {"content": None, "reasoning_content": None, "tool_calls": None, **delta}
-    return SN(choices=[SN(delta=SN(**values), finish_reason=None)], usage=None)
 
 
 class StreamBroken(Exception):
@@ -56,8 +53,8 @@ def policy(**kwargs):
 
 def test_midstream_retry_completes():
     llm = ScriptedLLM(
-        ([chunk(content="H")], StreamBroken(503)),
-        ([chunk(content="Hello"), chunk(content=" world")], None),
+        ([text_chunk("H")], StreamBroken(503)),
+        ([text_chunk("Hello"), text_chunk(" world")], None),
     )
     run, events, session = drive(Runtime(llm=llm, llm_stream_retry=policy(max_attempts=3)))
 
@@ -73,7 +70,7 @@ def test_midstream_retry_completes():
 
 
 def test_non_retriable_fails_fast():
-    llm = ScriptedLLM(([chunk(content="x")], StreamBroken(400)))
+    llm = ScriptedLLM(([text_chunk("x")], StreamBroken(400)))
     run, events, _ = drive(Runtime(llm=llm, llm_stream_retry=policy(max_attempts=3)))
 
     assert run.status is RunStatus.FAILED
@@ -82,7 +79,7 @@ def test_non_retriable_fails_fast():
 
 
 def test_attempts_exhausted_fails():
-    broken = ([chunk(content="x")], StreamBroken(503))
+    broken = ([text_chunk("x")], StreamBroken(503))
     llm = ScriptedLLM(broken, broken, broken)
     run, events, _ = drive(Runtime(llm=llm, llm_stream_retry=policy(max_attempts=3)))
 
@@ -92,7 +89,7 @@ def test_attempts_exhausted_fails():
 
 
 def test_no_policy_keeps_old_behavior():
-    llm = ScriptedLLM(([chunk(content="H")], StreamBroken(503)))
+    llm = ScriptedLLM(([text_chunk("H")], StreamBroken(503)))
     run, events, _ = drive(Runtime(llm=llm))
 
     assert run.status is RunStatus.FAILED

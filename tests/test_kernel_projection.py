@@ -6,21 +6,17 @@ from scratch** -- an approach that incrementally maintains a parallel wire list 
 remembering to sync at every point history is appended to, and missing one causes silent drift.
 """
 import asyncio
-import json
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from flops_agent import Agent, InMemoryDatabase, Query, Runner, Runtime  # noqa: E402
 from flops_agent.engine.execution import RunStatus  # noqa: E402
+from conftest import text_chunk  # noqa: E402
 
 
-def _chunk(content=None):
-    return SN(choices=[SN(delta=SN(content=content, reasoning_content=None, tool_calls=None),
-                          finish_reason=None, index=0)], usage=None)
 
 
 class ScriptedLLM:
@@ -39,7 +35,7 @@ class ScriptedLLM:
 
 def test_default_projection_is_identity():
     async def go():
-        llm = ScriptedLLM([_chunk("hi")])
+        llm = ScriptedLLM([text_chunk("hi")])
         rt = Runtime(llm=llm, database=InMemoryDatabase())
         s = await rt.load_session("s1", owner_id="u1")
         run = rt.start(s, Query.text("are you there"))
@@ -71,7 +67,7 @@ def test_projection_is_recomputed_every_request_and_never_touches_history():
             return self.step == 0        # run exactly two steps
 
     async def go():
-        llm = ScriptedLLM([_chunk("step one")], [_chunk("step two")])
+        llm = ScriptedLLM([text_chunk("step one")], [text_chunk("step two")])
         rt = Runtime(llm=llm, database=InMemoryDatabase(), runner=Projecting)
         s = await rt.load_session("s2", owner_id="u1")
         run = rt.start(s, Query.text("start"))
@@ -102,7 +98,7 @@ def test_identity_and_persona_ride_on_top_of_the_projection():
             return "You are an assistant"
 
     async def go():
-        llm = ScriptedLLM([_chunk("ok")])
+        llm = ScriptedLLM([text_chunk("ok")])
         rt = Runtime(llm=llm, database=InMemoryDatabase(), runner=Trimming, agent=Persona())
         s = await rt.load_session("s3", owner_id="u1")
         s.append({"role": "user", "content": "first sentence"})

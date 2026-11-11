@@ -11,7 +11,6 @@ silent, degrade gracefully — never loop forever.
 import asyncio
 import os
 import sys
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -22,20 +21,15 @@ from flops_agent.engine.runner import (  # noqa: E402
     SILENT_REPLY_REASONING_CUE,
 )
 from flops_agent.seams.database import InMemoryDatabase  # noqa: E402
+from conftest import reasoning_chunk, text_chunk, tool_chunk  # noqa: E402
 
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def chunk(**delta):
-    d = {"content": None, "reasoning_content": None, "tool_calls": None, **delta}
-    return SN(choices=[SN(delta=SN(**d), finish_reason=None)], usage=None)
 
 
-def tool_chunk(name, args="{}"):
-    return chunk(tool_calls=[SN(index=0, id="c1", type="function",
-                                function=SN(name=name, arguments=args))])
 
 
 class FakeLLM:
@@ -56,7 +50,7 @@ class FakeLLM:
         return gen()
 
 
-SILENT = [chunk(reasoning_content="Actually the answer is 42, I'll just tell the user.")]
+SILENT = [reasoning_chunk("Actually the answer is 42, I'll just tell the user.")]
 
 
 def _session(db):
@@ -69,7 +63,7 @@ def _session(db):
 def test_silent_step_rescued_via_system_nudge():
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [chunk(reasoning_content="Some extra reasoning."), chunk(content="The answer is 42.")])
+        llm = FakeLLM(SILENT, [reasoning_chunk("Some extra reasoning."), text_chunk("The answer is 42.")])
         runtime = Runtime(llm=llm, database=db)
         await runtime.start(_session(db), Query.text("What is the answer")).wait()
 
@@ -94,7 +88,7 @@ def test_silent_step_rescued_via_system_nudge():
 def test_content_prefill_channel():
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [chunk(content="The answer is 42.")])
+        llm = FakeLLM(SILENT, [text_chunk("The answer is 42.")])
         runtime = Runtime(
             llm=llm, database=db,
             reply_rescue_plan={"mode": "content_prefill", "flag": {"prefix": True}},
@@ -116,7 +110,7 @@ def test_content_prefill_channel():
 def test_reasoning_prefill_channel():
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [chunk(content="The answer is 42.")])
+        llm = FakeLLM(SILENT, [text_chunk("The answer is 42.")])
         runtime = Runtime(
             llm=llm, database=db,
             reply_rescue_plan={"mode": "reasoning_prefill", "flag": {"partial": True}},
@@ -146,7 +140,7 @@ def test_prefill_rescue_drops_tools_and_merges_overrides():
 
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [chunk(content="The answer is 42.")])
+        llm = FakeLLM(SILENT, [text_chunk("The answer is 42.")])
         runtime = Runtime(
             llm=llm, database=db, tools=[ping],
             reply_rescue_plan={"mode": "content_prefill", "flag": {"prefix": True},
@@ -168,7 +162,7 @@ def test_system_nudge_keeps_tools():
 
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [chunk(content="The answer is 42.")])
+        llm = FakeLLM(SILENT, [text_chunk("The answer is 42.")])
         runtime = Runtime(llm=llm, database=db, tools=[ping])
         await runtime.start(_session(db), Query.text("What is the answer")).wait()
         assert "tools" in llm.requests[1]
@@ -181,7 +175,7 @@ def test_system_nudge_keeps_tools():
 def test_normal_replies_untouched():
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM([chunk(reasoning_content="Let me think."), chunk(content="Normal reply.")])
+        llm = FakeLLM([reasoning_chunk("Let me think."), text_chunk("Normal reply.")])
         runtime = Runtime(llm=llm, database=db)
         await runtime.start(_session(db), Query.text("Hi")).wait()
         assert llm.calls == 1
@@ -213,7 +207,7 @@ def test_rescue_fires_once_then_promotes_reasoning():
     never arm a second retry."""
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [chunk(reasoning_content="Still just thinking, not saying anything.")])
+        llm = FakeLLM(SILENT, [reasoning_chunk("Still just thinking, not saying anything.")])
         runtime = Runtime(llm=llm, database=db)
         await runtime.start(_session(db), Query.text("What is the answer")).wait()
         assert llm.calls == 2
@@ -250,7 +244,7 @@ def test_rescue_step_may_switch_to_tools():
 
     async def go():
         db = InMemoryDatabase()
-        llm = FakeLLM(SILENT, [tool_chunk("ping")], [chunk(content="Done looking it up.")])
+        llm = FakeLLM(SILENT, [tool_chunk("ping")], [text_chunk("Done looking it up.")])
         runtime = Runtime(llm=llm, database=db, tools=[ping])
         await runtime.start(_session(db), Query.text("Look it up")).wait()
         stored = db.load_messages("s1")

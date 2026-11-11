@@ -3,12 +3,12 @@ import asyncio
 import os
 import sys
 import time
-from types import SimpleNamespace as SN
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from flops_agent import InMemoryDatabase, InMemoryRunStore, Query, Run, Runtime, Session  # noqa: E402
+from conftest import text_chunk  # noqa: E402
 
 
 class SlowRunStore(InMemoryRunStore):
@@ -53,7 +53,7 @@ class MarkerCheckingLLM:
         assert (self.database.load_meta("s1") or {}).get("active_run_id")
 
         async def stream():
-            yield SN(choices=[SN(delta=SN(content="ok", reasoning_content=None, tool_calls=None), finish_reason=None)], usage=None)
+            yield text_chunk("ok")
 
         return stream()
 

@@ -28,18 +28,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from flops_agent import Runtime, MemoryInbox, Session  # noqa: E402
+from conftest import finish_chunk, text_chunk, tool_chunk  # noqa: E402
 
 
-def _chunk(content=None, tool_call=None, finish=None):
-    delta = SimpleNamespace(content=content, reasoning_content=None, tool_calls=None)
-    if tool_call is not None:
-        idx, name, args = tool_call
-        delta.tool_calls = [SimpleNamespace(
-            index=idx, id=f"call_{name}_{idx}",
-            function=SimpleNamespace(name=name, arguments=args),
-        )]
-    return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=finish)],
-                           usage=None)
 
 
 class ScriptedLLM:
@@ -57,11 +48,11 @@ class ScriptedLLM:
 
         async def _stream():
             if step[0] == "tool":
-                yield _chunk(tool_call=(0, step[1], step[2]))
-                yield _chunk(finish="tool_calls")
+                yield tool_chunk(step[1], step[2], cid=f"call_{step[1]}_0")
+                yield finish_chunk("tool_calls")
             else:
-                yield _chunk(content=step[1])
-                yield _chunk(finish="stop")
+                yield text_chunk(step[1])
+                yield finish_chunk("stop")
 
         return _stream()
 
