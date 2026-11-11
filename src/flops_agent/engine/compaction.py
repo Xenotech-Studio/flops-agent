@@ -196,11 +196,14 @@ class ProjectionConfig:
     estimation path.
     """
 
-    # Token estimation (tokens ≈ ceil((CJK chars / cjk_ratio + other chars / latin_ratio) × safety margin × global calibration))
-    cjk_chars_per_token: float = 1.7
+    # GLM-5.3 Responses calibration (2026-11-12): repeated Chinese prose,
+    # 1,000 / 10,000 / 100,000 chars -> 613 / 5,979 / 59,632 input tokens
+    # (includes request overhead). Use 2/3 token per CJK char plus a 25% buffer;
+    # this is a conservative estimate, not a tokenizer or a universal upper bound.
+    cjk_chars_per_token: float = 1.5
     latin_chars_per_token: float = 4.0
-    image_tokens: int = 1500
-    safety_margin: float = 1.15
+    image_tokens: int = 1500  # TODO: calibrate against measured multimodal usage.
+    safety_margin: float = 1.25
     global_calibration: float = 1.0
 
     # Standard-tier soft-trim for tool results (keep head and tail, omit the middle)
