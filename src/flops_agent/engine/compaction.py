@@ -896,6 +896,7 @@ def build_llm_messages_with_context_projection(
     reinject_tool_results_count: int = 0,
     reinject_budget_chars: int = 0,
     hard_max_chars: int = 0,
+    tail_start: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Build the messages sent to the LLM based on the currently active compaction record:
     1 system message (the summary) + optionally 1 more system message (re-injecting the most
@@ -929,7 +930,12 @@ def build_llm_messages_with_context_projection(
         )
 
     summary_text = active.summary_text.strip()
-    tail_start = adjust_tail_start_for_tool_protocol(messages, active.covers_exclusive_end)
+    # The summary's coverage is immutable. A request may restore additional raw
+    # history before that boundary without changing what the summary describes.
+    tail_start = adjust_tail_start_for_tool_protocol(
+        messages, min(active.covers_exclusive_end, max(0, tail_start))
+        if tail_start is not None else active.covers_exclusive_end,
+    )
     tail = config.expand_canonical_to_llm_messages(
         messages,
         start_idx=tail_start,
@@ -941,7 +947,7 @@ def build_llm_messages_with_context_projection(
 
     if reinject_tool_results_count > 0 and reinject_budget_chars > 0:
         picks = gather_recent_tool_results_for_reinject(
-            config, messages, active.covers_exclusive_end,
+            config, messages, tail_start,
             k=reinject_tool_results_count, budget_chars=reinject_budget_chars,
         )
         content = format_reinject_system_content(picks)
@@ -949,6 +955,167 @@ def build_llm_messages_with_context_projection(
             prefix_msgs.append({"role": "system", "content": content})
 
     return prefix_msgs + tail
+
+
+@dataclass
+class ContextProjection:
+    """One selected window, shared by accounting and the actual request builder."""
+
+    messages: List[Dict[str, Any]]
+    tail_start: int
+    tail_tokens: int
+    tail_chars: int
+    summary_tokens: int
+    summary_chars: int
+    reinject_tokens: int
+    reinject_chars: int
+    total_tokens: int
+
+
+def _projected_message_weight(config: ProjectionConfig, message: Dict[str, Any], unit: str) -> int:
+    """Measure already projected content without applying trimming a second time."""
+    text, images = content_text_and_image_count(message.get("content"))
+    total = config.weigh_text(text, unit) + config.image_weight(images, unit)
+    if message.get("role") == "assistant":
+        reasoning = message.get("reasoning_content")
+        if isinstance(reasoning, str):
+            total += config.weigh_text(reasoning, unit)
+        calls = message.get("tool_calls")
+        if isinstance(calls, list):
+            for call in cast(List[Any], calls):
+                if not isinstance(call, dict):
+                    continue
+                function: Any = cast(Dict[str, Any], call).get("function")
+                if isinstance(function, dict):
+                    args: Any = cast(Dict[str, Any], function).get("arguments")
+                    total += config.weigh_text(args if isinstance(args, str) else json.dumps(args, ensure_ascii=False), unit)
+    return total
+
+
+def _projection_wire_tokens(config: ProjectionConfig, messages: List[Dict[str, Any]]) -> int:
+    """Include message/tool-call framing; image bytes are never counted as text."""
+    if not messages:
+        return 0
+    images = 0
+
+    def shape(value: Any) -> Any:
+        nonlocal images
+        if isinstance(value, list):
+            return [shape(item) for item in cast(List[Any], value)]
+        if isinstance(value, dict):
+            obj = cast(Dict[str, Any], value)
+            if is_image_block(obj):
+                images += 1
+                return {"type": obj.get("type"), "image": "<binary>"}
+            return {key: shape(item) for key, item in obj.items()}
+        return value
+
+    serialized = json.dumps(shape(messages), ensure_ascii=False, separators=(",", ":"))
+    return config.estimate_tokens(serialized) + config.image_weight(images, "token")
+
+
+def build_context_projection(
+    config: ProjectionConfig,
+    messages: List[Dict[str, Any]],
+    active: Optional[CompactionRecord],
+    *,
+    format_metadata: FormatMetadata,
+    min_tail_tokens: int = 0,
+    min_tail_messages: int = 0,
+    max_total_tokens: int = 0,
+    fixed_overhead_tokens: int = 0,
+    prepare_message: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+    reinject_tool_results_count: int = 0,
+    reinject_budget_chars: int = 0,
+    hard_max_chars: int = 0,
+) -> ContextProjection:
+    """Keep the summary and restore older raw turns when grading shrinks its tail.
+
+    The tail floor is best effort; the request budget takes priority. The
+    product can supply a pure preparation callback (e.g. decrypt a message).
+    It is called only for inspected messages, on a copy, before measuring them.
+    Canonical messages and the summary's coverage are never modified.
+    """
+    prepared = list(messages)
+    ready: set[int] = set()
+    length = len(prepared)
+
+    def prepare(index: int) -> None:
+        if index not in ready:
+            if prepare_message is not None:
+                prepared[index] = prepare_message(dict(prepared[index]))
+            ready.add(index)
+
+    def align(start: int) -> int:
+        if 0 < start < length and prepared[start].get("role") == "tool":
+            anchor = start - 1
+            while anchor >= 0 and prepared[anchor].get("role") == "tool":
+                anchor -= 1
+            if anchor >= 0:
+                prepare(anchor)
+        return adjust_tail_start_for_tool_protocol(prepared, start)
+
+    valid = active is not None and bool(active.summary_text.strip()) and 0 <= active.covers_exclusive_end <= length
+    start = align(active.covers_exclusive_end) if valid and active is not None else 0
+
+    def render(tail_start: int) -> ContextProjection:
+        for index in range(tail_start, length):
+            prepare(index)
+        # Re-injection uses only the still omitted prefix. Hydrate its selected
+        # results as well, including their assistant anchor for tool labels.
+        if valid and reinject_tool_results_count > 0 and reinject_budget_chars > 0:
+            picked = 0
+            used = 0
+            for index in range(tail_start - 1, -1, -1):
+                if prepared[index].get("role") != "tool":
+                    continue
+                prepare(index)
+                text = config.tool_content_to_trimmed_str(prepared[index].get("content"))
+                if len(text.strip()) < 200:
+                    continue
+                align(index)
+                picked += 1
+                used += len(text)
+                if picked >= reinject_tool_results_count or used >= reinject_budget_chars:
+                    break
+        wire = build_llm_messages_with_context_projection(
+            config, prepared, active if valid else None, format_metadata=format_metadata,
+            reinject_tool_results_count=reinject_tool_results_count,
+            reinject_budget_chars=reinject_budget_chars, hard_max_chars=hard_max_chars,
+            tail_start=tail_start,
+        )
+        summary = str(wire[0].get("content") or "") if valid else ""
+        prefix_count = int(valid)
+        reinject = ""
+        if len(wire) > prefix_count and wire[prefix_count].get("role") == "system":
+            content = wire[prefix_count].get("content")
+            if isinstance(content, str) and content.startswith(REINJECT_SYSTEM_TAG):
+                reinject = content
+                prefix_count += 1
+        tail = wire[prefix_count:]
+        return ContextProjection(
+            messages=wire, tail_start=tail_start,
+            tail_tokens=sum(_projected_message_weight(config, m, "token") for m in tail),
+            tail_chars=sum(_projected_message_weight(config, m, "char") for m in tail),
+            summary_tokens=config.estimate_tokens(summary), summary_chars=len(summary),
+            reinject_tokens=config.estimate_tokens(reinject), reinject_chars=len(reinject),
+            total_tokens=max(0, fixed_overhead_tokens) + _projection_wire_tokens(config, wire),
+        )
+
+    result = render(start)
+    while valid and start > 0 and (
+        result.tail_tokens < min_tail_tokens or length - start < min_tail_messages
+    ):
+        if max_total_tokens > 0 and result.total_tokens >= max_total_tokens:
+            break
+        candidate = align(start - 1)
+        if candidate >= start:  # An orphan tool result cannot create a new window boundary.
+            break
+        proposed = render(candidate)
+        if max_total_tokens > 0 and proposed.total_tokens > max_total_tokens:
+            break
+        start, result = candidate, proposed
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1502,37 +1669,21 @@ def try_rehome_from_archive(
     tools_schema_l1_chars: int = 0,
     window_usable: int = 0,
 ) -> Optional[RepairOutcome]:
-    """Search the archive for a record with ``0 <= covers_exclusive_end <= msg_len`` whose
-    total L1 token count falls within ``[MIN, trigger line]``; among multiple candidates,
-    take the one with the largest ``covers_exclusive_end``. ``None`` means no candidate was
-    found (the caller decides, based on this, whether to clear active or leave it as-is)."""
+    """Recover the latest structurally valid summary after a missing/stale pointer.
+
+    Size thresholds govern planning and request budgets, not summary validity.
+    A short tail can be expanded; a large tail needs a newer summary.
+    """
     if msg_len <= 0:
         return None
-    lo_c, hi_c = policy.verbatim_bounds_tok(window_usable)
-    overhead = policy.decision_overhead_tokens(estimator, primary_system_l1_chars, tools_schema_l1_chars)
-    suffix = estimator.suffix_l1_totals(messages, format_metadata, unit="token")
-    min_tail_tok = policy.verbatim_min_tail_tokens(window_usable)
-
     best_e = -1
     best_id: Optional[str] = None
     for rec in archive:
         e = rec.covers_exclusive_end
-        if e < 0 or e > msg_len or e == msg_len:
+        if e < 0 or e > msg_len:
             continue
         st = (rec.summary_text or "").strip()
         if len(st) < 40 or not rec.id:
-            continue
-        inj = policy.summary_injection_tokens(estimator, st)
-        ts = adjust_tail_start_for_tool_protocol(messages, e)
-        if not estimator.tail_verbatim_constraints_met(
-            messages, ts, format_metadata,
-            min_tail_count=min_tail_tok, min_tail_messages=policy.verbatim_min_tail_messages,
-            suffix=suffix, unit="token",
-        ):
-            continue
-        tail_chars = estimator.verbatim_slice_char_count(messages, ts, msg_len, format_metadata, unit="token")
-        combined = overhead + inj + tail_chars
-        if combined < lo_c or combined > hi_c:
             continue
         if e > best_e:
             best_e = e
@@ -1556,9 +1707,9 @@ def repair_active(
     tools_schema_l1_chars: int = 0,
     window_usable: int = 0,
 ) -> RepairOutcome:
-    """Fix up active: if its length is out of range, or its current total L1 is not within
-    ``[MIN, trigger line]``, reselect a record from the archive (clearing active if no
-    candidate is found). Callers should run this before every occasion where they're about
+    """Repair missing/invalid summary records, independently of projection size.
+    Tool grading can shrink the tail, and new messages can grow it; neither
+    invalidates a summary of an unchanged prefix. Callers run this before they're about
     to actually use active to build the wire payload / decide whether new compaction is
     needed, then apply the resulting ``RepairOutcome`` to the
     :class:`~flops_agent.seams.compaction_store.CompactionStore` (``changed=False`` means do
@@ -1572,9 +1723,6 @@ def repair_active(
     downstream code will keep retrying to resolve the same unresolvable id.
     """
     L = len(messages)
-    lo_c, hi_c = policy.verbatim_bounds_tok(window_usable)
-    overhead = policy.decision_overhead_tokens(estimator, primary_system_l1_chars, tools_schema_l1_chars)
-
     if active is None:
         had_dangling_id = bool(active_id)
         rehome = try_rehome_from_archive(
@@ -1589,27 +1737,8 @@ def repair_active(
         return RepairOutcome(changed=False)
 
     end_exc = active.covers_exclusive_end
-    stale_len = end_exc < 0 or end_exc > L or end_exc == L
-    if not stale_len:
-        inj = policy.summary_injection_tokens(estimator, (active.summary_text or "").strip())
-        tail_start = adjust_tail_start_for_tool_protocol(messages, end_exc)
-        tail_c = estimator.verbatim_slice_char_count(messages, tail_start, L, format_metadata, unit="token")
-        combined = overhead + inj + tail_c
-        min_tail_tok = policy.verbatim_min_tail_tokens(window_usable)
-        tail_ok = estimator.tail_verbatim_constraints_met(
-            messages, tail_start, format_metadata,
-            min_tail_count=min_tail_tok, min_tail_messages=policy.verbatim_min_tail_messages, unit="token",
-        )
-        if lo_c <= combined <= hi_c and tail_ok:
-            return RepairOutcome(changed=False)
-        rehome = try_rehome_from_archive(
-            policy, estimator, messages, archive, L, format_metadata,
-            primary_system_l1_chars=primary_system_l1_chars, tools_schema_l1_chars=tools_schema_l1_chars,
-            window_usable=window_usable,
-        )
-        if rehome is not None:
-            return rehome
-        return RepairOutcome(changed=True, new_active_id=None)
+    if 0 <= end_exc <= L and active.summary_text.strip():
+        return RepairOutcome(changed=False)
 
     rehome = try_rehome_from_archive(
         policy, estimator, messages, archive, L, format_metadata,
@@ -1634,6 +1763,8 @@ __all__ = [
     "gather_recent_tool_results_for_reinject",
     "format_reinject_system_content",
     "build_llm_messages_with_context_projection",
+    "ContextProjection",
+    "build_context_projection",
     "cjk_char_ratio",
     "detect_repeated_lines",
     "quality_gate_check",
