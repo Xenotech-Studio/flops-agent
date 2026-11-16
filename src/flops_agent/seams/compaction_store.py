@@ -34,6 +34,23 @@ class CompactionRecord:
 
 
 @runtime_checkable
+class ContextGenerationStore(Protocol):
+    """Optional atomic projection/summary recovery seam; old stores stay compatible.
+
+    A snapshot is owned by one session. CAS must commit its projection decisions,
+    summary and active pointer together, or leave all three unchanged. The state
+    is JSON-compatible and contains descriptors, never canonical message bodies.
+    """
+
+    def load(self, user_id: str, conversation_id: str) -> tuple[Optional[Dict[str, Any]], Optional[CompactionRecord]]:
+        ...
+
+    def compare_and_swap(self, user_id: str, conversation_id: str, expected_projection_id: Optional[str],
+                         state: Dict[str, Any], record: Optional[CompactionRecord] = None) -> bool:
+        ...
+
+
+@runtime_checkable
 class CompactionStore(Protocol):
     """Read/write protocol for compaction records, addressed by ``session_id``."""
 
@@ -130,4 +147,4 @@ class InMemoryCompactionStore:
         return bool(drop)
 
 
-__all__ = ["CompactionRecord", "CompactionStore", "InMemoryCompactionStore"]
+__all__ = ["CompactionRecord", "CompactionStore", "ContextGenerationStore", "InMemoryCompactionStore"]
