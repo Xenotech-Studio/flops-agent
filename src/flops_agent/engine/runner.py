@@ -49,10 +49,14 @@ import logging
 import time
 from datetime import datetime
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, cast, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, cast, Set, Coroutine
 
 from flops_agent.entities import events as _ev
-from flops_agent.entities.contracts import FinishStreamChunk, JSONMapping, StreamChunk, ToolCall, ToolOutcome
+from flops_agent.entities.contracts import (
+    FinishStreamChunk, ProviderStreamChunk, JSONMapping, StreamChunk, TextStreamChunk,
+    ToolCallStreamChunk, ToolCall, ToolOutcome,
+)
+from flops_agent.seams.inbox import SteerableInbox
 from flops_agent.tools.registry import ToolContext
 from .execution import Run, RunStatus
 from .interaction import UNSET, Interaction, InteractionKind, InteractionRequest, StepPlan, ToolAction, ToolGate
@@ -124,6 +128,9 @@ class Runner:
         self.session = session
         self.query = query
         self.run = run
+        self._stop_waiter = asyncio.Event()
+        self._steer_output_started = False
+        self._attempt_abandoned = False
 
         # ── State for this run (things that used to live scattered across a scratch dict) ──
         self.step = 0
@@ -412,19 +419,41 @@ class Runner:
         exist in exactly one place — overriding all of stream_llm would silently
         swallow the retry logic too.
         """
+        # One cancellable stop waiter per stream step; legacy lightweight Run
+        # handles without listeners keep their chunk-boundary stop checks.
+        if not getattr(self, "_stop_listener_registered", False):
+            self._stop_waiter = asyncio.Event()
+            listen = getattr(self.run, "on_stop", None)
+            if listen is not None:
+                listen(self._stop_waiter.set)
+            self._stop_listener_registered = True
         request = await self.build_request()
         policy = self.runtime.llm_stream_retry
-        attempt = 0
+        attempt = 1
+        self._steer_output_started = False
         while True:
-            attempt += 1
+            self._attempt_abandoned = False
+            self.usage = self.finish_reason = None
             acc = StreamAccumulator()
             self.stream_acc = acc
             try:
-                if not await self.consume_stream(request, acc):
-                    return False               # Stop consuming upstream and release the connection as early as possible
+                result = await self._await_with_steer(self.consume_stream(request, acc))
+                if result is None:
+                    await self._accept_steer()
+                    if self.run.stop_requested:
+                        return False
+                    request = await self.build_request()
+                    continue  # Local replacement is not an error attempt.
+                if not result or self.run.stop_requested:
+                    return False
+                await self.validate_stream_completion(acc)
+                if self.run.stop_requested:
+                    return False
             except asyncio.CancelledError:
                 raise
             except Exception as e:                  # noqa: BLE001 —— retriable errors back off and resend the whole step
+                if self._attempt_abandoned:
+                    raise  # A failed cancellation/admission must not resend stale history.
                 if (
                     policy is None
                     or attempt >= policy.max_attempts
@@ -433,7 +462,7 @@ class Runner:
                     raise
                 backoff = policy.backoffs[min(attempt - 1, len(policy.backoffs) - 1)]
                 logger.warning(
-                    "llm stream failed mid-way, retrying attempt=%d/%d backoff=%.1fs "
+                    "llm attempt failed, retrying attempt=%d/%d backoff=%.1fs "
                     "partial_len=%d exc=%s: %s",
                     attempt, policy.max_attempts, backoff, len(acc.text),
                     type(e).__name__, str(e)[:200],
@@ -446,9 +475,15 @@ class Runner:
                     exc_type=type(e).__name__,
                 ))
                 await self.on_llm_stream_retry(attempt, e, acc.text)
-                await asyncio.sleep(backoff)
-                if self.run is not None and self.run.stop_requested:  # pyright: ignore[reportUnnecessaryComparison] —— self.run's type is never None; kept defensively
+                attempt += 1
+                result = await self._await_with_steer(self._retry_delay(backoff))
+                if result is False:
                     return False
+                if result is None:
+                    await self._accept_steer()
+                    if self.run.stop_requested:
+                        return False
+                    request = await self.build_request()
                 continue
             self.assistant_text = acc.text
             self.reasoning_text = acc.reasoning
@@ -466,11 +501,25 @@ class Runner:
         adjust consumption details (cancellation-check timing, event rewriting);
         the retry loop itself still belongs to the framework.
         """
+        if self.run.stop_requested:
+            return False
         await self.before_llm_call()
+        if self.run.stop_requested:
+            return False
         stream = await self.runtime.llm.acompletion(**request)  # pyright: ignore[reportOptionalMemberAccess]
         try:
+            if getattr(self, "_attempt_abandoned", False):
+                return False
             await self.on_stream_open()
             async for chunk in stream:
+                # Set the gate without an await before any product hook or SSE
+                # emission. If both wakeups are ready, received text/tool wins;
+                # if steer wins first, even cancellation-resistant late chunks
+                # are discarded before touching accounting or the accumulator.
+                if getattr(self, "_attempt_abandoned", False):
+                    return False
+                if self.closes_steer_window(chunk):
+                    self._steer_output_started = True
                 await self.on_chunk(chunk)
                 if self.run.stop_requested:
                     return False
@@ -483,6 +532,93 @@ class Runner:
             close = getattr(stream, "aclose", None)
             if close is not None:
                 await close()
+
+    def closes_steer_window(self, chunk: StreamChunk) -> bool:
+        """Only visible text or actual tool-call evidence commits this attempt.
+
+        Reasoning/summary/encrypted-reasoning telemetry, usage and empty deltas
+        remain replaceable. Tool id alone is conservatively a started call.
+        """
+        if isinstance(chunk, TextStreamChunk):
+            return bool(chunk.text)
+        if isinstance(chunk, ToolCallStreamChunk):
+            return bool(chunk.id or chunk.name or chunk.arguments_delta)
+        if isinstance(chunk, ProviderStreamChunk):
+            return chunk.commits_output
+        return False
+
+    async def _await_with_steer(self, operation: Coroutine[Any, Any, bool]) -> Optional[bool]:
+        """Race an open/stream/backoff against stop and a non-consuming wakeup.
+
+        None means replacement; False means user stop. All owned tasks are
+        cancelled AND awaited before returning. A product without the optional
+        inbox wakeup contract retains the existing delivery boundaries.
+        """
+        work = asyncio.create_task(operation)
+        stop = asyncio.create_task(self._stop_waiter.wait())
+        inbox = getattr(self.runtime, "inbox", None)
+        steer = (asyncio.create_task(inbox.wait_for_steer(self.session))
+                 if isinstance(inbox, SteerableInbox) and not self._steer_output_started else None)
+        tasks: List[asyncio.Task[Any]] = [work, stop] + ([steer] if steer is not None else [])
+        try:
+            while True:
+                await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                if self.run.stop_requested:
+                    self._attempt_abandoned = True
+                    return False
+                if steer is not None and steer.done():
+                    # A broken notification transport must not lose input or
+                    # turn into an error retry. Ordinary boundary polling stays.
+                    try:
+                        steer.result()
+                    except Exception:
+                        logger.warning("inbox wakeup unavailable; using delivery boundaries", exc_info=True)
+                    else:
+                        if not self._steer_output_started:
+                            self._attempt_abandoned = True
+                            return None
+                    tasks.remove(steer)
+                    steer = None
+                if work.done():
+                    return work.result()
+        finally:
+            cancelled_work = not work.done()
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            if (cancelled_work and self._attempt_abandoned and not self.run.stop_requested
+                    and not work.cancelled() and work.exception() is not None):
+                raise RuntimeError("replaced LLM stream cleanup failed") from work.exception()
+
+    @staticmethod
+    async def _retry_delay(delay: float) -> bool:
+        await asyncio.sleep(delay)
+        return True
+
+    async def _accept_steer(self) -> None:
+        # The abandoned generator and HTTP-open task have already closed.
+        # Stop wins without dequeuing anything; durable input survives restart.
+        if self.run.stop_requested:
+            return
+        arrived = await self.runtime.inbox.poll(self.session, "steer")
+        # Once a destructive poll returned, land its messages even if stop
+        # arrived during that poll; never lose already transferred input.
+        self.append_arrivals(list(arrived or []))
+        self.stream_acc = StreamAccumulator()
+        self.assistant_text = self.reasoning_text = ""
+        self.tool_calls = []
+        self.usage = self.finish_reason = None
+        await self.on_llm_steer()
+
+    async def on_llm_steer(self) -> None:
+        """A local attempt was replaced, including its temporary reasoning.
+
+        Products reset transient UI/accounting here, separately from error
+        retries. No discarded assistant/usage is committed to history.
+        """
+        await self.persist()
+        await self.notify_history_changed()
 
     async def on_llm_stream_retry(
         self, attempt: int, exc: BaseException, partial_text: str,
@@ -777,6 +913,16 @@ class Runner:
         package that hasn't been opened yet, insert an "open this package" call in
         front of it first. ``before_tool``'s single-call granularity can't express
         that.
+        """
+        return None
+
+    async def validate_stream_completion(self, acc: StreamAccumulator) -> None:
+        """Validate a normally exhausted, closed stream inside the retry boundary.
+
+        No reply has been committed and no local tool dispatched. Products may
+        raise a semantic completion error; the existing retry policy decides
+        whether to resend. Accounting/persistence hooks remain outside this
+        boundary so their failures cannot replay a successful model request.
         """
         return None
 

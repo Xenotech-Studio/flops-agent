@@ -69,11 +69,10 @@ _RETRYABLE_STREAM_EXC_NAMES = frozenset({
 class LLMStreamRetryPolicy:
     """Retry policy for a mid-stream failure of an LLM streaming step.
 
-    This only covers failures that happen *after* the stream has started
-    producing output — transient errors before the first byte are already
-    handled by the product-layer LLM seam's own backoff-and-retry (that's the
-    seam's contract). The two layers have independent budgets and don't
-    substitute for each other.
+    Covers opening, consuming and validating one stream attempt. Products with
+    a retrying LLM seam should disable that seam's inner retries for managed
+    calls, so independent budgets do not multiply. Post-completion accounting
+    and persistence are deliberately outside this boundary.
 
     The semantics are **discard-and-resend-the-whole-step**, not resume-from-
     checkpoint: a half-written tool_call JSON blob can't be resumed, and

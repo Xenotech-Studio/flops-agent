@@ -3,7 +3,9 @@
 An agent may be working when a user or external system sends another message.
 The framework supports two delivery boundaries: ``deliver="turn"`` queues it
 until the current tool loop and final response finish, while ``deliver="step"``
-inserts it at the next loop boundary before another model call. At a turn
+inserts it at the next loop boundary, or restarts an in-flight model call
+that has not produced visible text or a tool call yet. Reasoning alone does
+not close this early-steer window. At a turn
 boundary, ``poll("turn")`` returns both kinds so a step message never remains
 queued after a run ends.
 
@@ -14,6 +16,7 @@ assistant turn.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from typing import Any, Dict, List, Protocol, runtime_checkable
 
@@ -37,6 +40,19 @@ class Inbox(Protocol):
         ...
 
 
+@runtime_checkable
+class SteerableInbox(Inbox, Protocol):
+    """Optional wakeup contract, without transferring ownership of queued input.
+
+    ``wait_for_steer`` must be cancellable, check already pending input, and
+    return only when ``poll(session, "steer")`` can supply eligible messages.
+    ``steer`` excludes inputs meant for a completed turn or tool boundary.
+    A notification is only a hint: poll/admission remains authoritative.
+    """
+
+    async def wait_for_steer(self, session: Any) -> None: ...
+
+
 class MemoryInbox:
     """Zero-configuration default: an in-process queue.
 
@@ -52,11 +68,27 @@ class MemoryInbox:
             lambda: {"step": [], "turn": []}
         )
 
+        self._waiters: Dict[str, asyncio.Event] = {}
+
     def push(self, session_id: str, message: Dict[str, Any], *, deliver: str = "turn") -> None:
         """Queue one message: ``"turn"`` waits for completion; ``"step"`` uses the next boundary."""
         if deliver not in ("turn", "step"):
             raise ValueError(f'deliver must be "turn" or "step", got {deliver!r}')
-        self._queues[str(session_id)][deliver].append(dict(message))
+        key = str(session_id)
+        self._queues[key][deliver].append(dict(message))
+        if deliver == "step" and key in self._waiters:
+            self._waiters[key].set()
+
+    async def wait_for_steer(self, session: Any) -> None:
+        key = str(getattr(session, "session_id", session))
+        ready = asyncio.Event()
+        self._waiters[key] = ready
+        try:
+            if not self._queues[key]["step"]:
+                await ready.wait()
+        finally:
+            if self._waiters.get(key) is ready:
+                self._waiters.pop(key, None)
 
     async def poll(self, session: Any, boundary: str) -> List[Dict[str, Any]]:
         q = self._queues.get(str(getattr(session, "session_id", session)))
@@ -72,4 +104,4 @@ class MemoryInbox:
         return out
 
 
-__all__ = ["Inbox", "MemoryInbox"]
+__all__ = ["Inbox", "SteerableInbox", "MemoryInbox"]

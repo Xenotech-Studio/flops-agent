@@ -99,3 +99,45 @@ def test_no_policy_keeps_old_behavior():
 
 def test_cancelled_error_never_retried():
     assert policy(max_attempts=3).retriable(asyncio.CancelledError()) is False
+
+
+def test_completion_validation_is_inside_existing_retry_after_stream_close():
+    from flops_agent import Runner
+    closed=[]
+    class LLM(ScriptedLLM):
+        async def acompletion(self, **kwargs):
+            stream=await super().acompletion(**kwargs)
+            number=self.calls
+            async def owned():
+                try:
+                    async for chunk in stream:yield chunk
+                finally:closed.append(number)
+            return owned()
+    class Validating(Runner):
+        async def validate_stream_completion(self, acc):
+            assert closed[-1]==self.runtime.llm.calls
+            if not acc.text:raise StreamBroken(503)
+    llm=LLM(([],None),([text_chunk('ok')],None))
+    run,events,session=drive(Runtime(llm=llm,runner=Validating,llm_stream_retry=policy()))
+    assert run.status is RunStatus.DONE and llm.calls==2 and closed==[1,2]
+    assert [m['content'] for m in session.messages if m.get('role')=='assistant']==['ok']
+
+
+def test_post_completion_hook_failure_cannot_replay_successful_output():
+    from flops_agent import Runner
+    class AccountingFailure(Runner):
+        async def on_stream_end(self):raise StreamBroken(503)
+    llm=ScriptedLLM(([text_chunk('already emitted')],None))
+    run,events,_=drive(Runtime(llm=llm,runner=AccountingFailure,llm_stream_retry=policy()))
+    assert run.status is RunStatus.FAILED and llm.calls==1
+    assert not [e for e in events if isinstance(e,ev.LLMStreamRetrying)]
+
+
+def test_retry_does_not_inherit_previous_attempt_usage():
+    from flops_agent import Runner, FinishStreamChunk
+    seen=[]
+    class Observe(Runner):
+        async def on_stream_end(self):seen.append(self.usage)
+    llm=ScriptedLLM(([FinishStreamChunk(usage={'prompt_tokens':123})],StreamBroken(503)),([text_chunk('ok')],None))
+    run,_,_=drive(Runtime(llm=llm,runner=Observe,llm_stream_retry=policy()))
+    assert run.status is RunStatus.DONE and llm.calls==2 and seen==[None]
