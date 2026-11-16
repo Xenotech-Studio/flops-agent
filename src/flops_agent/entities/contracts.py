@@ -88,11 +88,27 @@ class FinishStreamChunk:
     kind: Literal["finish"] = "finish"
 
 
+@dataclass(frozen=True)
+class ProviderStreamChunk:
+    """Optional provider-owned activity, never a locally executable tool call.
+
+    The product interprets `event`/`data`; framework history and tools do not.
+    `commits_output` closes the pre-output replacement gate for a hosted action.
+    Reasoning-only metadata leaves this False.
+    """
+
+    event: str
+    data: JSONMapping
+    commits_output: bool = False
+    kind: Literal["provider"] = "provider"
+
+
 StreamChunk: TypeAlias = (
     TextStreamChunk
     | ReasoningStreamChunk
     | ToolCallStreamChunk
     | FinishStreamChunk
+    | ProviderStreamChunk
 )
 
 
@@ -122,6 +138,7 @@ __all__ = [
     "ReasoningStreamChunk",
     "ToolCallStreamChunk",
     "FinishStreamChunk",
+    "ProviderStreamChunk",
     "StreamChunk",
     "ToolOutcome",
 ]

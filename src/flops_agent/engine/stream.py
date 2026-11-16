@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from flops_agent.entities import events as _ev
 from flops_agent.entities.contracts import (
     FinishStreamChunk,
+    ProviderStreamChunk,
     ReasoningStreamChunk,
     StreamChunk,
     TextStreamChunk,
@@ -47,6 +48,8 @@ class StreamAccumulator:
         if isinstance(chunk, ToolCallStreamChunk):
             yield from self._feed_tool_call(chunk)
             return
+        if isinstance(chunk, ProviderStreamChunk):
+            return  # Observed by Runner; never enter the local ToolExecutor.
         # Only FinishStreamChunk is left statically, so the check below is a
         # runtime guard, not a type narrowing: annotations do not stop a custom
         # client from yielding a provider SDK object. Say so loudly instead of

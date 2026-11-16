@@ -2,6 +2,7 @@
 
 from .contracts import (
     FinishStreamChunk,
+    ProviderStreamChunk,
     DispatchRecord,
     JSONMapping,
     JSONScalar,
@@ -30,6 +31,7 @@ __all__ = [
     "ReasoningStreamChunk",
     "ToolCallStreamChunk",
     "FinishStreamChunk",
+    "ProviderStreamChunk",
     "StreamChunk",
     "ToolOutcome",
 ]

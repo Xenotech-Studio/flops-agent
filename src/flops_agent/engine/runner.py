@@ -467,17 +467,22 @@ class Runner:
         the retry loop itself still belongs to the framework.
         """
         await self.before_llm_call()
-        stream = await self.runtime.llm.acompletion(**request)  # pyright: ignore[reportOptionalMemberAccess] —— a null llm here is a product-layer config error; let the caller observe it
-        await self.on_stream_open()
-        async for chunk in stream:
-            await self.on_chunk(chunk)
-            if self.run.stop_requested:        # Consume before checking: don't lose usage / finish_reason carried on the last chunk
-                return False
-            for event in acc.feed(chunk):
-                event = await self.on_event(event)
-                if event is not None:
-                    await self.emit(event)
-        return True
+        stream = await self.runtime.llm.acompletion(**request)  # pyright: ignore[reportOptionalMemberAccess]
+        try:
+            await self.on_stream_open()
+            async for chunk in stream:
+                await self.on_chunk(chunk)
+                if self.run.stop_requested:
+                    return False
+                for event in acc.feed(chunk):
+                    event = await self.on_event(event)
+                    if event is not None:
+                        await self.emit(event)
+            return True
+        finally:
+            close = getattr(stream, "aclose", None)
+            if close is not None:
+                await close()
 
     async def on_llm_stream_retry(
         self, attempt: int, exc: BaseException, partial_text: str,

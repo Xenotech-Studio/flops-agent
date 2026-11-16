@@ -25,6 +25,7 @@ The ``engine``, ``entities``, ``seams``, ``providers``, ``crypto``, and
 from .providers.openai import OpenAIStreamClient
 from .entities.contracts import (
     FinishStreamChunk,
+    ProviderStreamChunk,
     DispatchRecord,
     OpenAIToolCall,
     ReasoningStreamChunk,
@@ -150,6 +151,7 @@ __all__ = [
     "ReasoningStreamChunk",
     "ToolCallStreamChunk",
     "FinishStreamChunk",
+    "ProviderStreamChunk",
     "StreamChunk",
     "ToolOutcome",
     # Events
