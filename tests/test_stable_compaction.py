@@ -154,3 +154,47 @@ def test_parameters_are_frozen_until_next_generation():
     changed = ProjectionConfig(proj_recent_tool_full_max_chars=500)
     assert render(history(1), state, config=changed).messages == render(history(1), state).messages
     assert stable.trace(state)["parameters_sha256"] == stable.digest(state["parameters"])
+
+
+def test_manual_force_compacts_below_threshold_preserving_tail_pairing_and_reason():
+    config = ProjectionConfig()
+    policy = CompactionPolicy(
+        enabled=True,
+        verbatim_max_tokens_abs=500_000,
+        verbatim_hard_max_tokens_abs=600_000,
+        verbatim_min_tail_tokens_abs=4_000,
+        reserved_tail_messages=8,
+    )
+    messages = history(20, size=3_000)
+    original = deepcopy(messages)
+    state = stable.initial_state(config, policy, messages, None, format_metadata=fmt)
+
+    # Automatic planning stays idle well below trigger.
+    assert stable.plan(config, policy, messages, None, state, format_metadata=fmt,
+                       window_usable=500_000, fixed_overhead_tokens=100) is None
+
+    # Manual force skips only the trigger check, keeping tail floor + tool pairing.
+    planned = stable.plan(config, policy, messages, None, state, format_metadata=fmt,
+                          window_usable=500_000, fixed_overhead_tokens=100, force=True)
+    assert planned is not None
+    assert 0 < planned["new_until"] <= len(messages) - policy.reserved_tail_messages
+    assert messages[planned["new_until"]]["role"] != "tool"
+
+    record = CompactionRecord("cs-manual-1", planned["new_until"], "A faithful manual checkpoint summary. " * 25)
+    committed = stable.next_generation(
+        config, policy, messages, state, record,
+        format_metadata=fmt,
+        target_tokens=planned["target_tokens"],
+        fixed_overhead_tokens=100,
+        minimum_tail_tokens=planned["minimum_tail_tokens"],
+        reason="manual_compaction",
+    )
+    assert committed["generation"] == 1
+    assert committed["reason"] == "manual_compaction"
+    assert stable.trace(committed)["reason"] == "manual_compaction"
+    assert messages == original
+
+    # Re-running manual force immediately when no further messages outside tail exist fails safely.
+    with pytest.raises(stable.ProjectionFailure, match="irreducible_tail_floor"):
+        stable.plan(config, policy, messages, record, committed, format_metadata=fmt,
+                    window_usable=500_000, fixed_overhead_tokens=100, force=True)

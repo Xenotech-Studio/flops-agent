@@ -186,11 +186,11 @@ def project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Op
 
 def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
          active: Optional[CompactionRecord], state: Dict[str, Any], *, format_metadata: FormatMetadata,
-         window_usable: int, fixed_overhead_tokens: int) -> Optional[Dict[str, Any]]:
+         window_usable: int, fixed_overhead_tokens: int, force: bool = False) -> Optional[Dict[str, Any]]:
     current = project(config, messages, active, state, format_metadata=format_metadata,
                       fixed_overhead_tokens=fixed_overhead_tokens)
     trigger, target_lo, target_hi = policy.thresholds(window_usable)
-    if not policy.enabled or current.total_tokens <= trigger:
+    if not policy.enabled or (not force and current.total_tokens <= trigger):
         return None
     previous_end = active.covers_exclusive_end if active else 0
     # Age only the candidate tail; the summary still reads the pre-boundary state.
@@ -234,14 +234,15 @@ def summary_transcript(config: ProjectionConfig, messages: List[Dict[str, Any]],
 
 def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
                     previous: Dict[str, Any], record: CompactionRecord, *, format_metadata: FormatMetadata,
-                    target_tokens: int, fixed_overhead_tokens: int, minimum_tail_tokens: int = 0) -> Dict[str, Any]:
+                    target_tokens: int, fixed_overhead_tokens: int, minimum_tail_tokens: int = 0,
+                    reason: str = "context_threshold") -> Dict[str, Any]:
     start = adjust_tail_start_for_tool_protocol(messages, record.covers_exclusive_end)
     if start != record.covers_exclusive_end:
         raise ProjectionFailure("summary_splits_tool_pair")
     params = parameters(config, policy)
     tiers = config.compute_tool_tiers(messages)
     state: Dict[str, Any] = {**previous, "generation": int(previous["generation"]) + 1,
-        "projection_id": uuid.uuid4().hex, "reason": "context_threshold",
+        "projection_id": uuid.uuid4().hex, "reason": reason,
         "parameters": params, "parameters_sha256": digest(params),
         "active_summary_id": record.id, "tail_start": start, "boundary_count": len(messages),
         "boundary_history_sha256": history_digest(messages[start:]),

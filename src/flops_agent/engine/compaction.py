@@ -1599,6 +1599,7 @@ def plan_new_compaction(
     primary_system_l1_tokens: Optional[int] = None,
     tools_schema_l1_tokens: Optional[int] = None,
     window_usable: int = 0,
+    force: bool = False,
 ) -> Optional[CompactionPlan]:
     """Read-only: decides whether a new compaction needs to be triggered + computes the
     split point. ``None`` means no compaction is needed.
@@ -1635,7 +1636,7 @@ def plan_new_compaction(
     prev_inj = policy.summary_injection_tokens(estimator, prev_text) if prev_text else 0
     overhead = overhead_fixed + prev_inj
     tail_now = estimator.verbatim_slice_char_count(messages, prev_end, len(messages), format_metadata, unit="token")
-    if overhead + tail_now <= trigger:
+    if not force and overhead + tail_now <= trigger:
         return None
 
     new_until = compute_ideal_covers_exclusive_end(
