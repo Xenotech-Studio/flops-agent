@@ -48,7 +48,7 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, cast, Set, Coroutine
 
@@ -995,7 +995,7 @@ class Runner:
             "index": index,
             "payload": dict(req.payload),
             "run_id": self.run.id,       # Ownership: the guard that clears markers when other runs conclude uses this to decide "that run is still alive" and leaves it alone
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
     async def on_interaction_requested(self, req: InteractionRequest, call: Any, index: int) -> None:

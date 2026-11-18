@@ -30,7 +30,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Callable, Dict, List, Mapping, Optional, Tuple, Type, Union, cast
 
 from .execution import Coalescer, Run, RunPool, SessionRunActiveError
@@ -389,7 +389,7 @@ class Runtime:
             session.meta = {}
         if str(session.meta.get(f) or "").strip() == str(run_id):
             return None
-        now_iso = datetime.now().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         session.meta[f] = run_id
         session.meta[sf] = now_iso
         return {f: run_id, sf: now_iso}
