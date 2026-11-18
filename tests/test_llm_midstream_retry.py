@@ -78,6 +78,50 @@ def test_non_retriable_fails_fast():
     assert not [event for event in events if isinstance(event, ev.LLMStreamRetrying)]
 
 
+def test_product_can_repair_and_rebuild_one_failed_request_before_retry_policy():
+    from flops_agent import Runner
+
+    class Recovering(Runner):
+        recoveries = 0
+
+        async def recover_llm_failure(self, exc, acc, attempt):
+            assert isinstance(exc, StreamBroken)
+            assert not acc.text and not acc.tool_calls()
+            assert attempt == 1
+            type(self).recoveries += 1
+            return {"messages": [{"role": "user", "content": "compacted"}], "stream": True}
+
+    llm = ScriptedLLM(
+        ([], StreamBroken(400)),
+        ([text_chunk("ok")], None),
+    )
+    run, events, session = drive(Runtime(llm=llm, runner=Recovering))
+
+    assert run.status is RunStatus.DONE
+    assert llm.calls == 2
+    assert Recovering.recoveries == 1
+    assert not [event for event in events if isinstance(event, ev.LLMStreamRetrying)]
+    assert [m["content"] for m in session.messages if m.get("role") == "assistant"] == ["ok"]
+
+
+def test_product_failure_recovery_is_framework_bounded_to_one_replacement():
+    from flops_agent import Runner
+
+    class OvereagerRecovery(Runner):
+        recoveries = 0
+
+        async def recover_llm_failure(self, exc, acc, attempt):
+            type(self).recoveries += 1
+            return {"messages": [], "stream": True}
+
+    llm = ScriptedLLM(([], StreamBroken(400)), ([], StreamBroken(400)))
+    run, _events, _session = drive(Runtime(llm=llm, runner=OvereagerRecovery))
+
+    assert run.status is RunStatus.FAILED
+    assert llm.calls == 2
+    assert OvereagerRecovery.recoveries == 1
+
+
 def test_attempts_exhausted_fails():
     broken = ([text_chunk("x")], StreamBroken(503))
     llm = ScriptedLLM(broken, broken, broken)

@@ -38,6 +38,7 @@ Step                     Responsibility
 ``should_continue()``    Should we take another step?
 ``finalize()``           Wrap-up (persistence, etc.)
 ``on_llm_stream_retry()`` The stream failed mid-way and the whole step is about to be resent (reset half-finished downstream state)
+``recover_llm_failure()`` Give the product one bounded chance to repair a failed request and rebuild it
 ======================  ==========================================================
 """
 from __future__ import annotations
@@ -430,6 +431,7 @@ class Runner:
         request = await self.build_request()
         policy = self.runtime.llm_stream_retry
         attempt = 1
+        failure_recovery_used = False
         self._steer_output_started = False
         while True:
             self._attempt_abandoned = False
@@ -454,6 +456,19 @@ class Runner:
             except Exception as e:                  # noqa: BLE001 —— retriable errors back off and resend the whole step
                 if self._attempt_abandoned:
                     raise  # A failed cancellation/admission must not resend stale history.
+                # A product may repair request state after a deterministic provider
+                # rejection (for example, compact an underestimated context) and
+                # return a newly built request.  The framework accepts at most one
+                # such replacement per step; product hooks still decide whether the
+                # attempt is side-effect-free enough to replay.  This runs before the
+                # ordinary transient retry classifier so deterministic recovery is
+                # not accidentally charged against, or multiplied by, that budget.
+                if not failure_recovery_used:
+                    recovered = await self.recover_llm_failure(e, acc, attempt)
+                    if recovered is not None:
+                        failure_recovery_used = True
+                        request = recovered
+                        continue
                 if (
                     policy is None
                     or attempt >= policy.max_attempts
@@ -632,6 +647,19 @@ class Runner:
         client-side reset is delivered via the ``LLMStreamRetrying`` event through
         the wire layer (the product layer maps that event in to_sse).
         """
+
+    async def recover_llm_failure(
+        self, exc: BaseException, acc: StreamAccumulator, attempt: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Optionally repair one failed LLM request and return its replacement.
+
+        The framework calls this before ordinary transient retry classification
+        and accepts a non-``None`` replacement at most once per step.  The default
+        is no recovery.  Product overrides must conservatively reject replay after
+        visible output or tool side effects and must rebuild the full request after
+        changing session state.
+        """
+        return None
 
     async def before_llm_call(self) -> None:
         """About to call the provider for this attempt — no network I/O for it
