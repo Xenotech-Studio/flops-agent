@@ -9,8 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections import Counter
 from dataclasses import asdict, dataclass, fields, replace
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from typing_extensions import override
 
@@ -30,6 +31,21 @@ STATE_KEY = "context_projection_state_v1"
 
 class ProjectionFailure(ValueError):
     """A safe, content-free reason to keep the previous generation / refuse send."""
+
+
+@dataclass
+class SummaryFoldTelemetry:
+    """Content-free counters for one logical summary task.
+
+    The product layer may persist these values.  They deliberately contain no
+    transcript, summary, exception text, or provider credentials.
+    """
+
+    model_calls: int = 0
+    segmented_calls: int = 0
+    split_events: int = 0
+    max_depth: int = 0
+    initial_overflow: bool = False
 
 
 def digest(value: Any) -> str:
@@ -216,8 +232,15 @@ def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict
             "minimum_tail_tokens": floor}
 
 
-def summary_transcript(config: ProjectionConfig, messages: List[Dict[str, Any]], state: Dict[str, Any],
-                       plan_: Dict[str, Any], *, format_metadata: FormatMetadata, max_chars: int) -> str:
+def summary_history(config: ProjectionConfig, messages: List[Dict[str, Any]], state: Dict[str, Any],
+                    plan_: Dict[str, Any], *, format_metadata: FormatMetadata) -> List[Dict[str, Any]]:
+    """Return the complete, pre-generation-change history projection to summarize.
+
+    Images remain represented by a count because the summary endpoint is text
+    only.  No size cap is applied here: the provider is the authority on its
+    context window, and :func:`fold_summary_on_context_overflow` handles an
+    explicit overflow without silently discarding history.
+    """
     cfg = frozen_config(config, state)
     wire = _expand(cfg, messages, int(plan_["prev_end"]), int(plan_["new_until"]),
                    int(state["boundary_count"]), format_metadata, summary_input=True)
@@ -226,10 +249,138 @@ def summary_transcript(config: ProjectionConfig, messages: List[Dict[str, Any]],
     for msg in wire:
         text, images = content_text_and_image_count(msg.get("content"))
         normalized.append({**msg, "content": text, **({"image_count": images} if images else {})})
-    transcript = json.dumps({"previous_summary": plan_["prev_text"], "new_history": normalized}, ensure_ascii=False)
-    if max_chars > 0 and len(transcript) > max_chars:
-        raise ProjectionFailure("summary_input_budget_exceeded")
-    return transcript
+    return normalized
+
+
+def summary_transcript_from_history(previous_summary: str, history: List[Dict[str, Any]]) -> str:
+    """Serialize one complete chronological summary segment without truncation."""
+    return json.dumps({"previous_summary": previous_summary, "new_history": history}, ensure_ascii=False)
+
+
+def summary_transcript(config: ProjectionConfig, messages: List[Dict[str, Any]], state: Dict[str, Any],
+                       plan_: Dict[str, Any], *, format_metadata: FormatMetadata, max_chars: int = 0) -> str:
+    """Compatibility wrapper returning the uncapped summary transcript.
+
+    ``max_chars`` remains in the public signature for callers compiled against
+    the previous API, but no longer rejects or truncates input.  Provider
+    context overflow is handled only after a real summary attempt.
+    """
+    _ = max_chars
+    history = summary_history(config, messages, state, plan_, format_metadata=format_metadata)
+    return summary_transcript_from_history(str(plan_.get("prev_text") or ""), history)
+
+
+def _summary_split_index(history: List[Dict[str, Any]]) -> Optional[int]:
+    """Choose the character-balanced chronological boundary nearest the middle.
+
+    A boundary is ineligible when a tool result on the right belongs to an
+    assistant tool call on the left.  This keeps the call/result protocol unit
+    intact even for batches with several tool results.
+    """
+    if len(history) < 2:
+        return None
+    weights = [max(1, len(json.dumps(msg, ensure_ascii=False, separators=(",", ":")))) for msg in history]
+    total = sum(weights)
+    prefix = 0
+    candidates: List[tuple[int, int]] = []
+
+    def call_ids(items: List[Dict[str, Any]]) -> set[str]:
+        identities: set[str] = set()
+        for message in items:
+            raw_calls = message.get("tool_calls")
+            if not isinstance(raw_calls, list):
+                continue
+            for raw_call in cast(List[Any], raw_calls):
+                if not isinstance(raw_call, dict):
+                    continue
+                identity = cast(Dict[str, Any], raw_call).get("id")
+                if identity:
+                    identities.add(str(identity))
+        return identities
+
+    right_result_counts = Counter(
+        str(message.get("tool_call_id"))
+        for message in history
+        if message.get("role") == "tool" and message.get("tool_call_id")
+    )
+    crossing_ids: set[str] = set()
+    for index in range(1, len(history)):
+        prefix += weights[index - 1]
+        moved = history[index - 1]
+        for identity in call_ids([moved]):
+            if right_result_counts[identity] > 0:
+                crossing_ids.add(identity)
+        if moved.get("role") == "tool" and moved.get("tool_call_id"):
+            identity = str(moved["tool_call_id"])
+            right_result_counts[identity] -= 1
+            if right_result_counts[identity] <= 0:
+                crossing_ids.discard(identity)
+        if history[index].get("role") == "tool":
+            continue
+        if crossing_ids:
+            continue
+        candidates.append((abs(total - 2 * prefix), index))
+    return min(candidates)[1] if candidates else None
+
+
+def fold_summary_on_context_overflow(
+    previous_summary: str,
+    history: List[Dict[str, Any]],
+    summarize: Callable[[str, List[Dict[str, Any]]], str],
+    is_context_overflow: Callable[[BaseException], bool],
+    *,
+    telemetry: Optional[SummaryFoldTelemetry] = None,
+    max_depth: int = 12,
+    max_calls: int = 64,
+) -> str:
+    """Summarize all history, splitting only after an explicit provider overflow.
+
+    The first call always receives ``previous_summary`` plus the complete
+    ``history``.  On an explicit context-window rejection, the earlier half is
+    folded into an in-memory summary before the later half.  A child may split
+    recursively.  Other failures propagate unchanged.  The caller alone owns
+    persistence, so no intermediate result can advance a generation.
+    """
+    if max_depth < 1 or max_calls < 1:
+        raise ValueError("summary split limits must be positive")
+    stats = telemetry if telemetry is not None else SummaryFoldTelemetry()
+
+    def run(previous: str, segment: List[Dict[str, Any]], depth: int) -> str:
+        if depth > max_depth:
+            raise ProjectionFailure("summary_split_depth_exceeded")
+        if stats.model_calls >= max_calls:
+            raise ProjectionFailure("summary_split_call_budget_exceeded")
+        stats.model_calls += 1
+        if depth > 0:
+            stats.segmented_calls += 1
+        stats.max_depth = max(stats.max_depth, depth)
+        try:
+            result = summarize(previous, segment)
+        except Exception as exc:
+            if not is_context_overflow(exc):
+                raise
+            overflow_error: Exception = exc
+            if depth == 0:
+                stats.initial_overflow = True
+        else:
+            clean = str(result or "").strip()
+            if not clean:
+                raise ProjectionFailure("empty_summary_segment")
+            return clean
+
+        # Leave the provider exception handler before issuing child requests.
+        # Otherwise an unrelated child error receives the parent overflow as
+        # implicit ``__context__`` and can be misclassified as another overflow.
+        boundary = _summary_split_index(segment)
+        if boundary is None:
+            raise ProjectionFailure("summary_segment_indivisible") from overflow_error
+        if depth >= max_depth:
+            raise ProjectionFailure("summary_split_depth_exceeded") from overflow_error
+        stats.split_events += 1
+        earlier = run(previous, segment[:boundary], depth + 1)
+        return run(earlier, segment[boundary:], depth + 1)
+
+    return run(previous_summary, history, 0)
 
 
 def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
