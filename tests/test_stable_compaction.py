@@ -328,7 +328,10 @@ def test_manual_force_compacts_below_threshold_preserving_tail_pairing_and_reaso
     assert stable.trace(committed)["reason"] == "manual_compaction"
     assert messages == original
 
-    # Re-running manual force immediately when no further messages outside tail exist fails safely.
+    assert planned["selection"] == "forced_recent_boundary"
+    assert planned["new_until"] == planned["start_boundary"]
+
+    # There is no additional history outside the recent tail to fold.
     with pytest.raises(stable.ProjectionFailure, match="irreducible_tail_floor"):
         stable.plan(config, policy, messages, record, committed, format_metadata=fmt,
                     window_usable=500_000, fixed_overhead_tokens=100, force=True)

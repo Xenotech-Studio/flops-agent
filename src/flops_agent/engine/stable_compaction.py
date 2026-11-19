@@ -18,7 +18,7 @@ from typing_extensions import override
 from .compaction import (
     CompactionPolicy, ContextProjection, FormatMetadata, ProjectionConfig,
     SUMMARY_SYSTEM_TAG, adjust_tail_start_for_tool_protocol,
-    build_context_projection, compute_ideal_covers_exclusive_end,
+    build_context_projection,
     content_text_and_image_count, format_reinject_system_content,
     gather_recent_tool_results_for_reinject,
     _projected_message_weight, _projection_wire_tokens,  # pyright: ignore[reportPrivateUsage] -- shared engine accounting primitives
@@ -200,43 +200,128 @@ def project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Op
         total_tokens=max(0, fixed_overhead_tokens) + _projection_wire_tokens(cfg, wire), policy_trace=trace(state))
 
 
+def summary_reserve_tokens(config: ProjectionConfig, policy: CompactionPolicy) -> int:
+    """Upper-bound room for the summary that does not exist yet: its system-message
+    framing plus the summary call's output ceiling (``max_output_tokens``)."""
+    framing = _projection_wire_tokens(config, [{"role": "system", "content": SUMMARY_SYSTEM_TAG}])
+    return framing + max(0, int(policy.max_output_tokens))
+
+
+@dataclass
+class BoundaryChoice:
+    """Result of :func:`choose_recent_boundary` (all numbers in projected wire tokens)."""
+
+    boundary: int
+    start: int
+    estimated_tokens: int
+    start_tokens: int
+    reserve_tokens: int
+    selection: str
+
+
+def choose_recent_boundary(config: ProjectionConfig, policy: CompactionPolicy,
+                           messages: List[Dict[str, Any]], previous_end: int, *,
+                           target_tokens: int, fixed_overhead_tokens: int,
+                           format_metadata: FormatMetadata, fold_to_start: bool = False) -> BoundaryChoice:
+    """Pick the summary boundary by walking from the recent-tail boundary toward older
+    messages only.
+
+    * Start = the boundary that keeps the latest ``policy.reserved_tail_messages`` raw
+      messages, aligned so a tool call and its results are never separated (alignment
+      can only keep *more* messages).
+    * Every candidate is measured with one measure — fixed overhead + summary reserve
+      (:func:`summary_reserve_tokens`) + the projected wire of the retained tail under
+      the aged tool tiers the committed generation will use. Optional tool
+      restorations are excluded: they yield to the target at commit time.
+    * If the start already reaches the target it is chosen (compaction never gives up
+      because the target is out of reach). Otherwise the boundary moves one aligned
+      message at a time toward older history, keeping as much raw history as possible,
+      and stops at the last boundary before keeping one more message would exceed the
+      target.
+    * Candidates never reach back to (or before) the active summary's coverage; when
+      nothing older than the recent tail is left to fold, ``irreducible_tail_floor``.
+    """
+    count = len(messages)
+    recent = max(0, int(policy.reserved_tail_messages))
+    if count - recent <= previous_end:
+        raise ProjectionFailure("irreducible_tail_floor")
+    latest_start = count - recent
+    start = adjust_tail_start_for_tool_protocol(messages, latest_start)
+    if start > latest_start or any(
+        adjust_tail_start_for_tool_protocol(messages, index) > index
+        for index in range(max(1, start), count) if messages[index].get("role") == "tool"
+    ):
+        raise ProjectionFailure("recent_tail_contains_orphan_tool_result")
+    if start <= previous_end:
+        raise ProjectionFailure("irreducible_tail_floor")
+    aged = FrozenConfig(**{field.name: getattr(config, field.name) for field in fields(ProjectionConfig)},
+        tiers_by_identity={tool_identity(i, messages[i]): tier for i, tier in config.compute_tool_tiers(messages).items()})
+    reserve = summary_reserve_tokens(aged, policy)
+    base = max(0, int(fixed_overhead_tokens)) + reserve
+
+    def total(boundary: int) -> int:
+        tail = _expand(aged, messages, boundary, count, count, format_metadata,
+                       hard_max_chars=policy.verbatim_hard_max_chars)
+        return base + _projection_wire_tokens(aged, tail)
+
+    start_tokens = total(start)
+    if fold_to_start:
+        return BoundaryChoice(start, start, start_tokens, start_tokens, reserve, "forced_recent_boundary")
+    if start_tokens >= target_tokens:
+        return BoundaryChoice(start, start, start_tokens, start_tokens, reserve, "start_reaches_target")
+    chosen, chosen_tokens = start, start_tokens
+    candidate = start - 1
+    while candidate > previous_end:
+        aligned = adjust_tail_start_for_tool_protocol(messages, candidate)
+        if aligned <= previous_end or aligned > candidate:
+            break
+        if aligned <= candidate:
+            candidate_tokens = total(aligned)
+            if candidate_tokens > target_tokens:
+                return BoundaryChoice(chosen, start, chosen_tokens, start_tokens, reserve, "extended_within_target")
+            chosen, chosen_tokens = aligned, candidate_tokens
+        candidate = min(aligned, candidate) - 1
+    return BoundaryChoice(chosen, start, chosen_tokens, start_tokens, reserve, "all_older_history_fits")
+
+
 def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
          active: Optional[CompactionRecord], state: Dict[str, Any], *, format_metadata: FormatMetadata,
-         window_usable: int, fixed_overhead_tokens: int, force: bool = False) -> Optional[Dict[str, Any]]:
+         window_usable: int, fixed_overhead_tokens: int, force: bool = False,
+         send_safety_tokens: int = 0) -> Optional[Dict[str, Any]]:
+    """Decide whether to compact and where (see :func:`choose_recent_boundary`).
+
+    ``target_tokens`` (window × ``min_window_fraction``) is a selection goal only.
+    ``force`` permits a checkpoint below the automatic trigger. In that case it folds
+    everything before the recent boundary, so a manual checkpoint or provider-overflow
+    recovery can reduce the request even when local accounting reports low usage.
+    ``send_safety_tokens`` (optional, product's final request line): when even the
+    recent tail with no summary at all cannot fit under it, no summary can help, so the
+    plan is refused before spending a model call.
+    """
     current = project(config, messages, active, state, format_metadata=format_metadata,
                       fixed_overhead_tokens=fixed_overhead_tokens)
-    trigger, target_lo, target_hi = policy.thresholds(window_usable)
+    trigger = policy.thresholds(window_usable)[0]
     if not policy.enabled or (not force and current.total_tokens <= trigger):
         return None
     previous_end = active.covers_exclusive_end if active else 0
-    # Age only the candidate tail; the summary still reads the pre-boundary state.
-    until = compute_ideal_covers_exclusive_end(policy, config, messages, target_lo, target_hi,
-        format_metadata, overhead=fixed_overhead_tokens + policy.max_output_tokens, window_usable=window_usable)
-    aged = FrozenConfig(**{field.name: getattr(config, field.name) for field in fields(ProjectionConfig)},
-        tiers_by_identity={tool_identity(i, messages[i]): tier for i, tier in config.compute_tool_tiers(messages).items()})
-    def tail_tokens(start: int) -> int:
-        tail = _expand(aged, messages, start, len(messages), len(messages), format_metadata,
-                       hard_max_chars=policy.verbatim_hard_max_chars)
-        return sum(_projected_message_weight(aged, msg, "token") for msg in tail)
-    floor = min(policy.verbatim_min_tail_tokens(window_usable), tail_tokens(0))
-    while until > previous_end and tail_tokens(until) < floor:
-        until = adjust_tail_start_for_tool_protocol(messages, until - 1)
-    if until <= previous_end:
-        raise ProjectionFailure("irreducible_tail_floor")
-    minimum_tail = _expand(aged, messages, until, len(messages), len(messages), format_metadata,
-                           hard_max_chars=policy.verbatim_hard_max_chars)
-    if fixed_overhead_tokens + _projection_wire_tokens(aged, minimum_tail) > target_hi:
-        raise ProjectionFailure("irreducible_fixed_and_tail_budget")
+    target = policy.selection_target_tokens(window_usable)
+    choice = choose_recent_boundary(config, policy, messages, previous_end, target_tokens=target,
+        fixed_overhead_tokens=fixed_overhead_tokens, format_metadata=format_metadata,
+        fold_to_start=force and current.total_tokens <= trigger)
+    if send_safety_tokens > 0 and choice.start_tokens - choice.reserve_tokens > send_safety_tokens:
+        raise ProjectionFailure("recent_tail_exceeds_send_safety")
     return {"prev_end": previous_end, "prev_text": active.summary_text if active else "",
-            "new_until": until, "target_tokens": target_hi, "trigger_tokens": trigger,
-            "minimum_tail_tokens": floor}
+            "new_until": choice.boundary, "target_tokens": target, "trigger_tokens": trigger,
+            "minimum_tail_tokens": 0, "current_tokens": current.total_tokens,
+            "estimated_tokens": choice.estimated_tokens, "start_boundary": choice.start,
+            "summary_reserve_tokens": choice.reserve_tokens, "selection": choice.selection}
 
 
 def plan_exact_boundary(config: ProjectionConfig, policy: CompactionPolicy,
                         messages: List[Dict[str, Any]], active: Optional[CompactionRecord],
                         state: Dict[str, Any], *, format_metadata: FormatMetadata,
                         window_usable: int, fixed_overhead_tokens: int,
-                        exact_tail_start: int) -> Dict[str, Any]:
+                        exact_tail_start: int, send_safety_tokens: int = 0) -> Dict[str, Any]:
     """Plan a manual compaction whose raw tail starts at an authoritative boundary.
 
     Unlike :func:`plan`, this never searches for a cheaper boundary.  The caller
@@ -255,14 +340,15 @@ def plan_exact_boundary(config: ProjectionConfig, policy: CompactionPolicy,
         raise ProjectionFailure("extreme_already_at_boundary")
     if adjust_tail_start_for_tool_protocol(messages, boundary) != boundary:
         raise ProjectionFailure("extreme_boundary_splits_tool_pair")
-    _trigger, _target_lo, target_hi = policy.thresholds(window_usable)
-    aged = frozen_config(config, state)
-    tail = _expand(aged, messages, boundary, len(messages), int(state["boundary_count"]),
+    target = policy.selection_target_tokens(window_usable)
+    aged = FrozenConfig(**{field.name: getattr(config, field.name) for field in fields(ProjectionConfig)},
+        tiers_by_identity={tool_identity(i, messages[i]): tier for i, tier in config.compute_tool_tiers(messages).items()})
+    tail = _expand(aged, messages, boundary, len(messages), len(messages),
                    format_metadata, hard_max_chars=policy.verbatim_hard_max_chars)
-    if fixed_overhead_tokens + _projection_wire_tokens(aged, tail) > target_hi:
+    if send_safety_tokens > 0 and max(0, fixed_overhead_tokens) + _projection_wire_tokens(aged, tail) > send_safety_tokens:
         raise ProjectionFailure("extreme_fixed_and_run_budget_unattainable")
     return {"prev_end": previous_end, "prev_text": active.summary_text if active else "",
-            "new_until": boundary, "target_tokens": target_hi, "trigger_tokens": 0,
+            "new_until": boundary, "target_tokens": target, "trigger_tokens": 0,
             "minimum_tail_tokens": 0}
 
 
@@ -420,7 +506,17 @@ def fold_summary_on_context_overflow(
 def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
                     previous: Dict[str, Any], record: CompactionRecord, *, format_metadata: FormatMetadata,
                     target_tokens: int, fixed_overhead_tokens: int, minimum_tail_tokens: int = 0,
-                    reason: str = "context_threshold") -> Dict[str, Any]:
+                    reason: str = "context_threshold", send_safety_tokens: int = 0,
+                    baseline_tokens: Optional[int] = None) -> Dict[str, Any]:
+    """Build the candidate generation for an already generated summary.
+
+    Optional tool restorations are dropped (oldest first) until ``target_tokens`` is met.
+    Without ``send_safety_tokens`` the target is a hard gate (historic behaviour). With it,
+    the target is a goal: once no optional restoration is left, a result above the target
+    is still accepted when it fits the send safety line and — if ``baseline_tokens`` (the
+    previous generation's projection of the same history) is given — is strictly smaller
+    than it, so a generation can never grow the request. ``target_missed`` records that.
+    """
     start = adjust_tail_start_for_tool_protocol(messages, record.covers_exclusive_end)
     if start != record.covers_exclusive_end:
         raise ProjectionFailure("summary_splits_tool_pair")
@@ -450,10 +546,21 @@ def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages
                          fixed_overhead_tokens=fixed_overhead_tokens)
         if result.tail_tokens < minimum_tail_tokens:
             raise ProjectionFailure("post_compaction_tail_floor_unattainable")
-        if result.total_tokens <= target_tokens:
+        within_safety = send_safety_tokens <= 0 or result.total_tokens <= send_safety_tokens
+        reduced = baseline_tokens is None or result.total_tokens < baseline_tokens
+        meets_target = result.total_tokens <= target_tokens
+        if within_safety and reduced and (meets_target or send_safety_tokens > 0 and not state["reinject_indices"]):
             state["committed_tokens"] = result.total_tokens
+            if meets_target:
+                state.pop("target_missed", None)
+            else:
+                state["target_missed"] = True
             return state
         if not state["reinject_indices"]:
+            if not within_safety:
+                raise ProjectionFailure("post_compaction_send_safety_exceeded")
+            if not reduced:
+                raise ProjectionFailure("post_compaction_no_reduction")
             raise ProjectionFailure("post_compaction_target_unattainable")
         # Optional whole restorations may be removed; instructions/pairs never sliced.
         state["reinject_indices"].pop(0)

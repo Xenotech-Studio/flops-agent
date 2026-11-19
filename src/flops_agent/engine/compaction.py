@@ -1469,6 +1469,20 @@ class CompactionPolicy:
         target_lo = max(0, target_hi - slack)
         return trigger, target_lo, target_hi
 
+    def selection_target_tokens(self, window_usable: int) -> int:
+        """Boundary-selection target for :func:`stable_compaction.plan` (token units).
+
+        Window available: exactly ``window × min_window_fraction`` — unlike
+        :meth:`thresholds` this is *not* raised by the min-tail guardrail, because the
+        recent-boundary search no longer enforces a token tail floor (the recent
+        ``reserved_tail_messages`` boundary replaces it). Window unavailable: the same
+        absolute fallback as ``thresholds()[2]``. It is a selection goal, never a commit
+        gate."""
+        w = self._window_usable(window_usable)
+        if w <= 0:
+            return self.thresholds(window_usable)[2]
+        return max(1, int(w * self.min_window_fraction))
+
     def decision_overhead_tokens(
         self,
         estimator: ProjectionConfig,
