@@ -232,6 +232,40 @@ def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict
             "minimum_tail_tokens": floor}
 
 
+def plan_exact_boundary(config: ProjectionConfig, policy: CompactionPolicy,
+                        messages: List[Dict[str, Any]], active: Optional[CompactionRecord],
+                        state: Dict[str, Any], *, format_metadata: FormatMetadata,
+                        window_usable: int, fixed_overhead_tokens: int,
+                        exact_tail_start: int) -> Dict[str, Any]:
+    """Plan a manual compaction whose raw tail starts at an authoritative boundary.
+
+    Unlike :func:`plan`, this never searches for a cheaper boundary.  The caller
+    supplies a durable run boundary and receives a refusal if the boundary cannot
+    be honored exactly.  This is deliberately unsuitable for automatic compaction.
+    """
+    if not policy.enabled:
+        raise ProjectionFailure("disabled")
+    previous_end = active.covers_exclusive_end if active else 0
+    boundary = int(exact_tail_start)
+    if boundary < 0 or boundary > len(messages):
+        raise ProjectionFailure("extreme_run_boundary_stale")
+    if previous_end > boundary:
+        raise ProjectionFailure("extreme_boundary_before_active_summary")
+    if previous_end == boundary:
+        raise ProjectionFailure("extreme_already_at_boundary")
+    if adjust_tail_start_for_tool_protocol(messages, boundary) != boundary:
+        raise ProjectionFailure("extreme_boundary_splits_tool_pair")
+    _trigger, _target_lo, target_hi = policy.thresholds(window_usable)
+    aged = frozen_config(config, state)
+    tail = _expand(aged, messages, boundary, len(messages), int(state["boundary_count"]),
+                   format_metadata, hard_max_chars=policy.verbatim_hard_max_chars)
+    if fixed_overhead_tokens + _projection_wire_tokens(aged, tail) > target_hi:
+        raise ProjectionFailure("extreme_fixed_and_run_budget_unattainable")
+    return {"prev_end": previous_end, "prev_text": active.summary_text if active else "",
+            "new_until": boundary, "target_tokens": target_hi, "trigger_tokens": 0,
+            "minimum_tail_tokens": 0}
+
+
 def summary_history(config: ProjectionConfig, messages: List[Dict[str, Any]], state: Dict[str, Any],
                     plan_: Dict[str, Any], *, format_metadata: FormatMetadata) -> List[Dict[str, Any]]:
     """Return the complete, pre-generation-change history projection to summarize.
