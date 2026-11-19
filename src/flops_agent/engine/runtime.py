@@ -1266,13 +1266,9 @@ class Runtime:
         own deployment specifics, like flushing staged keys). Returns the
         number of runs swept.
         """
-        swept = 0
-        for run in self.runs.active():
-            if run.done:
-                continue
-            await run.interrupt_for_shutdown()
-            swept += 1
-        return swept
+        pending = [run for run in self.runs.active() if not run.done]
+        await asyncio.gather(*(run.interrupt_for_shutdown() for run in pending))
+        return len(pending)
 
     def with_overrides(self, **kwargs: Any) -> "Runtime":
         """Derive a new runtime with a few configuration values changed

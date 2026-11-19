@@ -581,22 +581,23 @@ class Run:
                 return
             self.interrupted = True
             targets = list(self._subscribers)
-        store = self._store
-        if store is not None:
-            async def _persist_interruption() -> None:
-                await self.initialize_store()
-                async with self._store_write_lock:
-                    try:
-                        await asyncio.to_thread(store.mark_interrupted, self.id)
-                    except Exception:
-                        logger.exception("run store mark_interrupted failed run=%s", self.id)
-
-            asyncio.create_task(_persist_interruption(), name=f"run-interrupt-store:{self.id}")
+        # Wake subscribers first so their streams close without waiting on I/O.
         for q in targets:
             try:
                 q.put_nowait(None)
             except Exception:
                 pass
+        # Then persist the marker before returning: the process may exit right
+        # after the shutdown hook, and recovery depends on this marker to tell
+        # a graceful reload apart from a crash.
+        store = self._store
+        if store is not None:
+            await self.initialize_store()
+            async with self._store_write_lock:
+                try:
+                    await asyncio.to_thread(store.mark_interrupted, self.id)
+                except Exception:
+                    logger.exception("run store mark_interrupted failed run=%s", self.id)
 
     # ── read side (subscribers) ─────────────────────────────────────────────
 
