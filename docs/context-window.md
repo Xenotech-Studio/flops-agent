@@ -34,6 +34,8 @@ A projection should produce the same result for the same input. Start by shorten
 
 `flops_agent.engine.compaction` provides components including ProjectionConfig and CompactionPolicy; CompactionStore stores summary records. Your product must still supply the model window size, the summarization model, the permitted write timing, and a persistent backend, then include summaries in request projection.
 
+`flops_agent.engine.stable_compaction` verifies that history covered by a summary is unchanged before each request. By default it hashes each message's model-visible fields. If your store gives every message an identity and issues a new identity whenever that message's model-visible content changes, pass `identity_field=` to `initial_state`: generations then hash identities only, verification needs no message bodies (or decryption keys), and no content-derived digest is persisted. An identity that is reused for different content defeats this check, so enforce the rule at your single write path.
+
 There is no automatic `Runtime(compaction=True)` switch. This article does not pretend to supply a complete summarization service: without your window and storage constraints, it cannot safely choose which history to cover. Define the covered interval, recent history to retain, summary version, and fallback view before connecting these components.
 
 ## Check the result

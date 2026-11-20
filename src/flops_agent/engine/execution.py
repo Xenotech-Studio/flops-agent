@@ -636,11 +636,11 @@ class Run:
             while True:
                 item = await q.get()
                 if item is None:
-                    # ``finish`` wakes subscribers before Runner performs its
-                    # async marker cleanup. Keep the public stream lifecycle
-                    # aligned with ``wait()`` so callers do not tear down the
-                    # event loop while that ordered cleanup is still pending.
-                    await self.wait()
+                    # A terminal run still owes its ordered marker cleanup.
+                    # Shutdown also sends this sentinel while the driver is live,
+                    # so that subscribers can close before the driver is reaped.
+                    if self.done:
+                        await self.wait()
                     return
                 yield item
         finally:

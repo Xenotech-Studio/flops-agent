@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Identity-chain history verification for stable compaction generations
+  (`history_digest_version` 3). With `identity_field`, `initial_state` and every
+  later generation hash only the persistence identity each message carries, never
+  its content; `adopt_identity` re-keys a content-verified v2 generation without
+  changing its decisions. Sound only when the persistence layer issues a new
+  identity whenever a message's model-visible content changes. A summarized prefix
+  containing unidentified (uncommitted) turns is refused with
+  `history_identity_incomplete`. v2 content generations are unchanged.
 - Typed boundary contracts for provider stream chunks, tool calls and outcomes,
   dispatch records, and run metadata.
 - Interaction events in the public agent-event union and contract tests for the
