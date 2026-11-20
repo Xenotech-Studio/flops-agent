@@ -67,10 +67,251 @@ def tool_identity(index: int, message: Dict[str, Any]) -> str:
     return digest([index, message.get("role"), message.get("tool_call_id")])
 
 
+_DIGEST_KEYS = ("role", "content", "tool_calls", "tool_call_id", "reasoning_content", "thinking", "reasoning")
+#: Fields a persistence layer may materialize as explicit ``None`` on reload.
+_NULLABLE_DIGEST_KEYS = ("content", "tool_calls", "tool_call_id", "reasoning_content")
+HISTORY_DIGEST_VERSION = 2
+#: Older summary checkpoints kept for safe fallback after a rewrite of summarized history.
+SUMMARY_CHECKPOINT_LIMIT = 16
+_CHAIN_SEED = hashlib.sha256(b"flops-history-chain-v2").hexdigest()
+
+
 def history_digest(messages: List[Dict[str, Any]]) -> str:
+    """Version-1 digest. Key presence matters, so ``{"content": None}`` differs from ``{}``.
+
+    Kept byte-for-byte: committed v1 generations and other stored identities
+    (for example product run boundaries) were hashed with it. New generations
+    use :func:`history_digest_v2`.
+    """
     # Exclude usage, persisted IDs and transport metadata added after a send.
-    keys = ("role", "content", "tool_calls", "tool_call_id", "reasoning_content", "thinking", "reasoning")
-    return digest([{key: msg[key] for key in keys if key in msg} for msg in messages])
+    return digest([{key: msg[key] for key in _DIGEST_KEYS if key in msg} for msg in messages])
+
+
+def _canonical_message(message: Dict[str, Any]) -> Dict[str, Any]:
+    # A missing key and an explicit None are the same fact: an in-memory turn and
+    # its storage round trip must hash identically.
+    return {key: message[key] for key in _DIGEST_KEYS if message.get(key) is not None}
+
+
+def message_digest(message: Dict[str, Any]) -> str:
+    """Shape-insensitive digest of one message's model-visible fields."""
+    return digest(_canonical_message(message))
+
+
+def _chain_step(previous: str, message: Dict[str, Any]) -> str:
+    return hashlib.sha256(bytes.fromhex(previous) + bytes.fromhex(message_digest(message))).hexdigest()
+
+
+def chain_digest(messages: List[Dict[str, Any]], start: int = 0, end: Optional[int] = None,
+                 *, seed: Optional[str] = None) -> str:
+    """Resumable v2 digest of ``messages[start:end]``.
+
+    ``chain_digest(m, a, c) == chain_digest(m, b, c, seed=chain_digest(m, a, b))``,
+    so a verified prefix digest can be extended without rehashing the prefix.
+    """
+    value = seed or _CHAIN_SEED
+    for message in messages[start:len(messages) if end is None else end]:
+        value = _chain_step(value, message)
+    return value
+
+
+def chain_digests_at(messages: List[Dict[str, Any]], ends: List[int]) -> Dict[int, str]:
+    """Prefix digests ``chain_digest(messages, 0, e)`` for every ``e`` in one pass."""
+    wanted = sorted({e for e in ends if 0 <= e <= len(messages)})
+    out: Dict[int, str] = {}
+    value, position = _CHAIN_SEED, 0
+    for end in wanted:
+        for message in messages[position:end]:
+            value = _chain_step(value, message)
+        position = end
+        out[end] = value
+    return out
+
+
+def history_digest_v2(messages: List[Dict[str, Any]]) -> str:
+    return chain_digest(messages)
+
+
+@dataclass(frozen=True)
+class HistoryVerdict:
+    """Outcome of comparing current history with a committed generation.
+
+    ``match``: unchanged.  ``tail_rewritten``: only messages after the summary
+    boundary changed (summary still exact).  ``prefix_changed``: summarized
+    history changed; ``fallback`` is the newest still-exact older checkpoint or
+    ``None`` (no summary is valid).  ``unverifiable``: a v1 generation has no
+    prefix digest, so a rewrite cannot be proven to spare summarized history.
+    """
+
+    status: str
+    legacy: bool
+    fallback: Optional[Dict[str, Any]] = None
+
+
+def _legacy_views(messages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    # v1 hashes were taken either from storage reloads (nullable columns present as
+    # None) or from in-memory turns (keys absent); accept either uniform shape.
+    as_storage = [{**{key: None for key in _NULLABLE_DIGEST_KEYS}, **msg} for msg in messages]
+    stripped = [_canonical_message(msg) for msg in messages]
+    # Runner-built turns: a tool-call reply without text carries an explicit
+    # ``content: None`` while the other nullable keys are absent.
+    runner = [{**m, "content": None} if m.get("role") == "assistant" and m.get("tool_calls")
+              and "content" not in m else m for m in stripped]
+    return [messages, as_storage, stripped, runner]
+
+
+def history_matches(state: Dict[str, Any], messages: List[Dict[str, Any]]) -> bool:
+    """Check the committed tail and its immediate predecessor."""
+    count, start = int(state["boundary_count"]), int(state["tail_start"])
+    if len(messages) < count or not 0 <= start <= count:
+        return False
+    if state.get("history_digest_version") == HISTORY_DIGEST_VERSION:
+        if chain_digest(messages, start, count) != state["boundary_history_sha256"]:
+            return False
+        last = state.get("prefix_last_message_sha256")
+        return start == 0 or last is None or message_digest(messages[start - 1]) == last
+    expected = state["boundary_history_sha256"]
+    return any(history_digest(view[start:count]) == expected for view in _legacy_views(messages))
+
+
+PrefixSource = Optional[Callable[[], List[Dict[str, Any]]]]
+
+
+def _full(messages: List[Dict[str, Any]], prefix_messages: PrefixSource) -> List[Dict[str, Any]]:
+    """Fully prepared history (e.g. completely decrypted) for prefix digests."""
+    full = prefix_messages() if prefix_messages is not None else messages
+    if len(full) != len(messages):
+        raise ProjectionFailure("prefix_view_length_mismatch")
+    return full
+
+
+def check_history(state: Dict[str, Any], messages: List[Dict[str, Any]], *,
+                  prefix_messages: PrefixSource = None) -> HistoryVerdict:
+    """Classify current history against ``state`` (see :class:`HistoryVerdict`).
+
+    ``prefix_messages`` lazily supplies the same history with every message
+    prepared (needed whenever a summary covers a prefix).
+    """
+    legacy = state.get("history_digest_version") != HISTORY_DIGEST_VERSION
+    start = int(state["tail_start"])
+    matches = history_matches(state, messages)
+    if legacy:
+        if matches:
+            return HistoryVerdict("match", legacy)
+        return HistoryVerdict("prefix_changed" if len(messages) < start else "unverifiable", legacy)
+    if start == 0:
+        return HistoryVerdict("match" if matches else "tail_rewritten", legacy)
+    full = _full(messages, prefix_messages)
+    checkpoints = _checkpoints(state)
+    digests = chain_digests_at(full, [start] + [int(cp["covers_exclusive_end"]) for cp in checkpoints])
+    if start in digests and digests[start] == state["prefix_history_sha256"]:
+        return HistoryVerdict("match" if matches else "tail_rewritten", legacy)
+    for cp in reversed(checkpoints):
+        end = int(cp["covers_exclusive_end"])
+        if end in digests and digests[end] == cp["prefix_sha256"] and end < start:
+            return HistoryVerdict("prefix_changed", legacy, dict(cp))
+    return HistoryVerdict("prefix_changed", legacy)
+
+
+def _boundary_fields(messages: List[Dict[str, Any]], start: int, prefix_sha256: str) -> Dict[str, Any]:
+    return {"history_digest_version": HISTORY_DIGEST_VERSION,
+            "boundary_count": len(messages),
+            "boundary_history_sha256": chain_digest(messages, start),
+            "prefix_history_sha256": prefix_sha256,
+            "prefix_last_message_sha256": message_digest(messages[start - 1]) if start > 0 else None}
+
+
+def _checkpoints(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [dict(cp) for cp in cast(List[Dict[str, Any]], state.get("summary_checkpoints") or [])]
+
+
+def _checkpoint(record: CompactionRecord, prefix_sha256: str) -> Dict[str, Any]:
+    return {"summary_id": record.id, "covers_exclusive_end": int(record.covers_exclusive_end),
+            "prefix_sha256": prefix_sha256}
+
+
+def upgrade_legacy_state(state: Dict[str, Any], messages: List[Dict[str, Any]],
+                         active: Optional[CompactionRecord], *,
+                         prefix_messages: PrefixSource = None) -> Dict[str, Any]:
+    """Add v2 digests to a v1 generation that :func:`history_matches` just accepted.
+
+    Decisions (projection id, generation, tail, tiers) are unchanged, so concurrent
+    readers of the v1 state remain correct. Only call after a successful match:
+    the digests certify the history as it is now.
+    """
+    if state.get("history_digest_version") == HISTORY_DIGEST_VERSION:
+        return state
+    if not history_matches(state, messages):
+        raise ProjectionFailure("history_changed_since_context_boundary")
+    start, count = int(state["tail_start"]), int(state["boundary_count"])
+    full = _full(messages, prefix_messages)
+    ends = [start] + ([int(active.covers_exclusive_end)] if active else [])
+    digests = chain_digests_at(full, ends)
+    upgraded = {**state, **_boundary_fields(messages[:count], start, digests[start])}
+    checkpoints: List[Dict[str, Any]] = []
+    if active and int(active.covers_exclusive_end) in digests:
+        checkpoints.append(_checkpoint(active, digests[int(active.covers_exclusive_end)]))
+    upgraded["summary_checkpoints"] = checkpoints
+    return upgraded
+
+
+def reanchor_state(state: Dict[str, Any], messages: List[Dict[str, Any]], *,
+                   reason: str = "history_rewritten") -> Dict[str, Any]:
+    """New generation for a ``tail_rewritten`` verdict: same summary and boundary.
+
+    Frozen tool tiers survive for tool messages whose identity is unchanged;
+    rewritten ones get the first-use budget like any new message.
+    """
+    if state.get("history_digest_version") != HISTORY_DIGEST_VERSION:
+        raise ProjectionFailure("context_boundary_unverifiable")
+    start = int(state["tail_start"])
+    if not 0 <= start <= len(messages) or adjust_tail_start_for_tool_protocol(messages, start) != start:
+        raise ProjectionFailure("invalid_context_tail_boundary")
+    old_tiers = cast(Dict[str, str], state.get("tool_tiers") or {})
+    tiers = {ident: old_tiers[ident] for ident in
+             (tool_identity(i, messages[i]) for i in range(start, len(messages)) if messages[i].get("role") == "tool")
+             if ident in old_tiers}
+    new = {**state, "generation": int(state["generation"]) + 1, "projection_id": uuid.uuid4().hex,
+           "reason": reason, "tool_tiers": tiers,
+           **_boundary_fields(messages, start, state["prefix_history_sha256"])}
+    new.pop("committed_tokens", None)
+    new.pop("target_missed", None)
+    return new
+
+
+def rebase_state(config: ProjectionConfig, state: Dict[str, Any], messages: List[Dict[str, Any]],
+                 record: Optional[CompactionRecord], *, prefix_messages: PrefixSource = None,
+                 reason: str = "summarized_history_rewritten") -> Dict[str, Any]:
+    """New generation for a ``prefix_changed`` verdict.
+
+    ``record`` must be the verdict's fallback checkpoint summary (still exact for
+    the current prefix) or ``None``: then no summary is used and all raw history
+    is retained, so a later compaction rebuilds from complete history. Nothing is
+    discarded silently either way.
+    """
+    start = int(record.covers_exclusive_end) if record else 0
+    full = _full(messages, prefix_messages)
+    if record is not None and start > len(full):
+        raise ProjectionFailure("summary_checkpoint_mismatch")
+    if start > len(full) or adjust_tail_start_for_tool_protocol(messages, start) != start:
+        raise ProjectionFailure("invalid_context_tail_boundary")
+    prefix = chain_digests_at(full, [start])[start]
+    checkpoints = _checkpoints(state)
+    kept = [cp for cp in checkpoints if int(cp["covers_exclusive_end"]) <= start]
+    if record is not None:
+        match = [cp for cp in kept if cp["summary_id"] == record.id and cp["prefix_sha256"] == prefix]
+        if not match:
+            raise ProjectionFailure("summary_checkpoint_mismatch")
+    tiers = config.compute_tool_tiers(full)
+    new: Dict[str, Any] = {**state, "generation": int(state["generation"]) + 1,
+        "projection_id": uuid.uuid4().hex, "reason": reason,
+        "active_summary_id": record.id if record else None, "tail_start": start,
+        "tool_tiers": {tool_identity(i, messages[i]): tier for i, tier in tiers.items() if i >= start},
+        "reinject_indices": [], "summary_checkpoints": kept,
+        **_boundary_fields(full, start, prefix)}
+    new.pop("committed_tokens", None)
+    new.pop("target_missed", None)
+    return new
 
 
 @dataclass
@@ -107,7 +348,8 @@ def trace(state: Dict[str, Any]) -> Dict[str, Any]:
 
 def initial_state(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
                   active: Optional[CompactionRecord], *, format_metadata: FormatMetadata,
-                  window_usable: int = 0, fixed_overhead_tokens: int = 0) -> Dict[str, Any]:
+                  window_usable: int = 0, fixed_overhead_tokens: int = 0,
+                  prefix_messages: PrefixSource = None) -> Dict[str, Any]:
     # Adoption is an explicit boundary, not a claim that legacy prefixes were stable.
     legacy = len(messages) > 1 or active is not None
     selected = build_context_projection(config, messages, active, format_metadata=format_metadata,
@@ -123,12 +365,19 @@ def initial_state(config: ProjectionConfig, policy: CompactionPolicy, messages: 
         "reason": "legacy_adoption" if legacy else "new_session",
         "parameters": params, "parameters_sha256": digest(params),
         "active_summary_id": active.id if active else None,
-        "tail_start": selected.tail_start, "boundary_count": len(messages),
-        "boundary_history_sha256": history_digest(messages[selected.tail_start:]),
+        "tail_start": selected.tail_start,
         "tool_tiers": {tool_identity(i, messages[i]): tier for i, tier in tiers.items() if i >= selected.tail_start},
         # No duplicate restoration of outputs already present in the selected tail.
         "reinject_indices": [],
     }
+    full = _full(messages, prefix_messages)
+    start = selected.tail_start
+    ends = [start] + ([int(active.covers_exclusive_end)] if active else [])
+    digests = chain_digests_at(full, ends)
+    state.update(_boundary_fields(messages, start, digests[start]))
+    state["summary_checkpoints"] = (
+        [_checkpoint(active, digests[int(active.covers_exclusive_end)])]
+        if active and int(active.covers_exclusive_end) in digests else [])
     return state
 
 
@@ -137,9 +386,10 @@ class StableProjection(ContextProjection):
     policy_trace: Optional[Dict[str, Any]] = None
 
 
-def validate_history(state: Dict[str, Any], messages: List[Dict[str, Any]]) -> None:
-    count = int(state["boundary_count"])
-    if len(messages) < count or history_digest(messages[int(state["tail_start"]):count]) != state["boundary_history_sha256"]:
+def validate_history(state: Dict[str, Any], messages: List[Dict[str, Any]], *,
+                     prefix_messages: PrefixSource = None) -> None:
+    """Require the committed prefix and tail to match the current history."""
+    if check_history(state, messages, prefix_messages=prefix_messages).status != "match":
         raise ProjectionFailure("history_changed_since_context_boundary")
 
 
@@ -166,9 +416,9 @@ def _expand(config: FrozenConfig, messages: List[Dict[str, Any]], start: int, en
 
 def project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Optional[CompactionRecord],
             state: Dict[str, Any], *, format_metadata: FormatMetadata, fixed_overhead_tokens: int = 0,
-            check_history: bool = True) -> StableProjection:
+            check_history: bool = True, prefix_messages: PrefixSource = None) -> StableProjection:
     if check_history:
-        validate_history(state, messages)
+        validate_history(state, messages, prefix_messages=prefix_messages)
     cfg = frozen_config(config, state)
     if (active.id if active else None) != state["active_summary_id"]:
         raise ProjectionFailure("torn_context_generation")
@@ -507,7 +757,8 @@ def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages
                     previous: Dict[str, Any], record: CompactionRecord, *, format_metadata: FormatMetadata,
                     target_tokens: int, fixed_overhead_tokens: int, minimum_tail_tokens: int = 0,
                     reason: str = "context_threshold", send_safety_tokens: int = 0,
-                    baseline_tokens: Optional[int] = None) -> Dict[str, Any]:
+                    baseline_tokens: Optional[int] = None,
+                    prefix_messages: PrefixSource = None) -> Dict[str, Any]:
     """Build the candidate generation for an already generated summary.
 
     Optional tool restorations are dropped (oldest first) until ``target_tokens`` is met.
@@ -522,11 +773,20 @@ def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages
         raise ProjectionFailure("summary_splits_tool_pair")
     params = parameters(config, policy)
     tiers = config.compute_tool_tiers(messages)
+    previous_start = int(previous["tail_start"])
+    if previous.get("history_digest_version") == HISTORY_DIGEST_VERSION and previous_start <= start:
+        # The caller verified the previous prefix (history_matches/check_history), and
+        # messages from the previous tail onward are prepared: extend, don't rehash.
+        prefix = chain_digest(messages, previous_start, start, seed=previous["prefix_history_sha256"])
+    else:
+        prefix = chain_digests_at(_full(messages, prefix_messages), [start])[start]
+    checkpoints = [cp for cp in _checkpoints(previous) if int(cp["covers_exclusive_end"]) < start]
+    checkpoints = (checkpoints + [_checkpoint(record, prefix)])[-SUMMARY_CHECKPOINT_LIMIT:]
     state: Dict[str, Any] = {**previous, "generation": int(previous["generation"]) + 1,
         "projection_id": uuid.uuid4().hex, "reason": reason,
         "parameters": params, "parameters_sha256": digest(params),
-        "active_summary_id": record.id, "tail_start": start, "boundary_count": len(messages),
-        "boundary_history_sha256": history_digest(messages[start:]),
+        "active_summary_id": record.id, "tail_start": start,
+        **_boundary_fields(messages, start, prefix), "summary_checkpoints": checkpoints,
         "tool_tiers": {tool_identity(i, messages[i]): tier for i, tier in tiers.items() if i >= start},
         "target_tokens": target_tokens, "reinject_indices": []}
     picks = gather_recent_tool_results_for_reinject(config, messages, start,
@@ -543,7 +803,7 @@ def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages
     state["reinject_indices"] = sorted(selected)
     while True:
         result = project(config, messages, record, state, format_metadata=format_metadata,
-                         fixed_overhead_tokens=fixed_overhead_tokens)
+                         fixed_overhead_tokens=fixed_overhead_tokens, check_history=False)
         if result.tail_tokens < minimum_tail_tokens:
             raise ProjectionFailure("post_compaction_tail_floor_unattainable")
         within_safety = send_safety_tokens <= 0 or result.total_tokens <= send_safety_tokens
