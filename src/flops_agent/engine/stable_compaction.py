@@ -492,10 +492,121 @@ def validate_history(state: Dict[str, Any], messages: List[Dict[str, Any]], *,
         raise ProjectionFailure("history_changed_since_context_boundary")
 
 
+#: Turns one stored message into its prepared form (e.g. decrypts it). Must be pure:
+#: the same input always yields the same output, and the input is never modified.
+PrepareMessage = Callable[[Dict[str, Any]], Dict[str, Any]]
+
+
+class _LazyHistory:
+    """Read view over stored history: rows from ``ready_from`` on are prepared up front,
+    earlier rows only when a projection rule reads their bodies (reinjected tool
+    results, the calls naming them, tool names a window cannot resolve itself).
+
+    Roles, ``tool_call_id`` and identity fields of unprepared rows are read as stored,
+    so a storage layer must keep those fields readable; bodies may stay sealed. One
+    view lives for a single projection or plan call and is never shared.
+    """
+
+    def __init__(self, messages: List[Dict[str, Any]], ready_from: int, prepare: PrepareMessage) -> None:
+        self.prepare = prepare
+        ready = max(0, min(int(ready_from), len(messages)))
+        # Tool-protocol alignment looks back from a leading tool result to the call that
+        # issued it: keep that whole turn prepared so alignment never reads a sealed body.
+        while 0 < ready < len(messages) and messages[ready].get("role") == "tool":
+            ready -= 1
+        self.ready_from = ready
+        self.view: List[Dict[str, Any]] = list(messages)
+        for index in range(self.ready_from, len(messages)):
+            self.view[index] = prepare(messages[index])
+        self._raw = messages
+        self._done: set[int] = set()
+
+    def body(self, index: int) -> Dict[str, Any]:
+        if index >= self.ready_from or index in self._done:
+            return self.view[index]
+        self.view[index] = self.prepare(self._raw[index])
+        self._done.add(index)
+        return self.view[index]
+
+    def full(self) -> List[Dict[str, Any]]:
+        return [self.body(i) for i in range(len(self.view))]
+
+    def tool_names(self, start: int, end: int) -> Dict[str, str]:
+        """``tool_call_id -> name`` for tool results in ``[start, end)``.
+
+        Same result as scanning every assistant in history with later entries
+        overriding earlier ones, but the scan runs from the newest message backward
+        and stops once every needed id is resolved, so only an unresolvable id (a
+        tool result whose call is missing or sealed in older history) reaches back.
+        """
+        needed: set[str] = set()
+        for index in range(max(0, start), min(end, len(self.view))):
+            message = self.view[index]
+            tcid = message.get("tool_call_id") if message.get("role") == "tool" else None
+            if isinstance(tcid, str):
+                needed.add(tcid)
+        names: Dict[str, str] = {}
+        for index in range(len(self.view) - 1, -1, -1):
+            if not needed:
+                break
+            if self.view[index].get("role") != "assistant":
+                continue
+            calls = self.body(index).get("tool_calls")
+            if not isinstance(calls, list):
+                continue
+            found: Dict[str, str] = {}
+            for call in cast(List[Any], calls):
+                if not isinstance(call, dict):
+                    continue
+                call = cast(Dict[str, Any], call)
+                function_raw = call.get("function")
+                function: Dict[str, Any] = cast(Dict[str, Any], function_raw) if isinstance(function_raw, dict) else {}
+                tcid, name = call.get("id"), function.get("name")
+                if isinstance(tcid, str) and isinstance(name, str):
+                    found[tcid] = name
+            for tcid, name in found.items():
+                if tcid in needed:
+                    names[tcid] = name
+                    needed.discard(tcid)
+        return names
+
+    def reinject_item(self, config: ProjectionConfig, index: int) -> Optional[tuple[int, str, str]]:
+        """The restoration a full-history ``gather_recent_tool_results_for_reinject(...,
+        index + 1, k=1)`` yields for exactly ``index`` (or ``None``), reading only that
+        tool result and the latest earlier call carrying its id."""
+        tool = self.body(index)
+        if tool.get("role") != "tool":
+            return None
+        tcid = tool.get("tool_call_id")
+        parent: Optional[Dict[str, Any]] = None
+        if isinstance(tcid, str) and tcid:
+            for j in range(index - 1, -1, -1):
+                if self.view[j].get("role") != "assistant":
+                    continue
+                calls = self.body(j).get("tool_calls")
+                if isinstance(calls, list) and any(
+                        isinstance(c, dict) and cast(Dict[str, Any], c).get("id") == tcid
+                        for c in cast(List[Any], calls)):
+                    parent = self.body(j)
+                    break
+        window = ([parent] if parent is not None else []) + [tool]
+        item = gather_recent_tool_results_for_reinject(config, window, len(window), k=1, budget_chars=2**31 - 1)
+        if not item or item[0][0] != len(window) - 1:
+            return None
+        return (index, item[0][1], item[0][2])
+
+
 def _expand(config: FrozenConfig, messages: List[Dict[str, Any]], start: int, end: int,
             boundary: int, fmt: FormatMetadata, *, summary_input: bool = False,
-            hard_max_chars: int = 0, injection_chars: int = 0) -> List[Dict[str, Any]]:
+            hard_max_chars: int = 0, injection_chars: int = 0,
+            lazy: Optional[_LazyHistory] = None) -> List[Dict[str, Any]]:
     cfg = replace(config, user_msg_soft_trim_enabled=False, toolcall_args_soft_trim_enabled=False) if summary_input else config
+    names: Optional[Dict[str, str]] = None
+    if lazy is not None:
+        if start < lazy.ready_from:
+            raise ProjectionFailure("projection_window_not_prepared")
+        messages = lazy.view
+        names = lazy.tool_names(start, end)
     tiers = cfg.compute_tool_tiers(messages)
     # Keep the existing user regime; only tool/image decisions become generation-scoped.
     override_ = cfg.latest_user_regime_b_override(messages, start, end, fmt, tool_tiers=tiers,
@@ -503,10 +614,10 @@ def _expand(config: FrozenConfig, messages: List[Dict[str, Any]], start: int, en
     overrides = {override_[0]: override_[1]} if override_ else None
     split = min(end, max(start, boundary))
     old = cfg.expand_canonical_to_llm_messages(messages, start_idx=start, end_idx=split,
-        format_metadata=fmt, tool_tiers=tiers, user_trim_overrides=overrides)
+        format_metadata=fmt, tool_tiers=tiers, user_trim_overrides=overrides, tool_call_names=names)
     old = ProjectionConfig.apply_image_recency_policy(cfg, old)
     new = cfg.expand_canonical_to_llm_messages(messages, start_idx=split, end_idx=end,
-        format_metadata=fmt, tool_tiers=tiers, user_trim_overrides=overrides)
+        format_metadata=fmt, tool_tiers=tiers, user_trim_overrides=overrides, tool_call_names=names)
     for message in new:
         # New images keep their first per-message representation until a boundary.
         old.extend(ProjectionConfig.apply_image_recency_policy(cfg, [message]))
@@ -515,7 +626,29 @@ def _expand(config: FrozenConfig, messages: List[Dict[str, Any]], start: int, en
 
 def project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Optional[CompactionRecord],
             state: Dict[str, Any], *, format_metadata: FormatMetadata, fixed_overhead_tokens: int = 0,
-            check_history: bool = True, prefix_messages: PrefixSource = None) -> StableProjection:
+            check_history: bool = True, prefix_messages: PrefixSource = None,
+            prepare_message: Optional[PrepareMessage] = None) -> StableProjection:
+    """Wire projection of ``messages`` under the committed generation ``state``.
+
+    Without ``prepare_message`` every message must already be prepared. With it,
+    ``messages`` may be stored rows: the retained tail is prepared, and older rows
+    only where a rule reads their bodies (see :class:`_LazyHistory`). The result is
+    identical either way.
+    """
+    start = int(state["tail_start"])
+    lazy = _LazyHistory(messages, start, prepare_message) if prepare_message is not None else None
+    return _project(config, messages, active, state, format_metadata=format_metadata,
+                    fixed_overhead_tokens=fixed_overhead_tokens, check_history=check_history,
+                    prefix_messages=prefix_messages, lazy=lazy)
+
+
+def _project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Optional[CompactionRecord],
+             state: Dict[str, Any], *, format_metadata: FormatMetadata, fixed_overhead_tokens: int,
+             check_history: bool, prefix_messages: PrefixSource,
+             lazy: Optional[_LazyHistory]) -> StableProjection:
+    if lazy is not None:
+        # Content digests (v1/v2) cover bodies across the boundary: prepare everything.
+        messages = lazy.view if identity_field_of(state) is not None else lazy.full()
     if check_history:
         validate_history(state, messages, prefix_messages=prefix_messages)
     cfg = frozen_config(config, state)
@@ -531,6 +664,11 @@ def project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Op
     for index in cast(List[int], state["reinject_indices"]):
         if index >= start or str(messages[index].get("tool_call_id")) in retained:
             continue
+        if lazy is not None:
+            lazy_item = lazy.reinject_item(cfg, index)
+            if lazy_item is not None:
+                picks.append(lazy_item)
+            continue
         item = gather_recent_tool_results_for_reinject(cfg, messages, index + 1, k=1, budget_chars=2**31 - 1)
         if item and item[0][0] == index:
             picks.extend(item)
@@ -539,7 +677,7 @@ def project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: Op
         prefix.append({"role": "system", "content": reinject})
     tail = _expand(cfg, messages, start, len(messages), int(state["boundary_count"]), format_metadata,
         hard_max_chars=int(state["parameters"]["compaction"]["verbatim_hard_max_chars"]),
-        injection_chars=len(summary) + len(reinject))
+        injection_chars=len(summary) + len(reinject), lazy=lazy)
     wire = prefix + tail
     return StableProjection(messages=wire, tail_start=start,
         tail_tokens=sum(_projected_message_weight(cfg, msg, "token") for msg in tail),
@@ -571,7 +709,21 @@ class BoundaryChoice:
 def choose_recent_boundary(config: ProjectionConfig, policy: CompactionPolicy,
                            messages: List[Dict[str, Any]], previous_end: int, *,
                            target_tokens: int, fixed_overhead_tokens: int,
-                           format_metadata: FormatMetadata, fold_to_start: bool = False) -> BoundaryChoice:
+                           format_metadata: FormatMetadata, fold_to_start: bool = False,
+                           prepare_message: Optional[PrepareMessage] = None) -> BoundaryChoice:
+    """See :func:`_choose_recent_boundary`. ``prepare_message`` as in :func:`project`:
+    only history from ``previous_end`` on (plus rules' reads) is prepared."""
+    lazy = _LazyHistory(messages, previous_end, prepare_message) if prepare_message is not None else None
+    return _choose_recent_boundary(config, policy, messages, previous_end, target_tokens=target_tokens,
+                                   fixed_overhead_tokens=fixed_overhead_tokens, format_metadata=format_metadata,
+                                   fold_to_start=fold_to_start, lazy=lazy)
+
+
+def _choose_recent_boundary(config: ProjectionConfig, policy: CompactionPolicy,
+                            messages: List[Dict[str, Any]], previous_end: int, *,
+                            target_tokens: int, fixed_overhead_tokens: int,
+                            format_metadata: FormatMetadata, fold_to_start: bool,
+                            lazy: Optional[_LazyHistory]) -> BoundaryChoice:
     """Pick the summary boundary by walking from the recent-tail boundary toward older
     messages only.
 
@@ -590,6 +742,10 @@ def choose_recent_boundary(config: ProjectionConfig, policy: CompactionPolicy,
     * Candidates never reach back to (or before) the active summary's coverage; when
       nothing older than the recent tail is left to fold, ``irreducible_tail_floor``.
     """
+    if lazy is not None:
+        if previous_end < lazy.ready_from:
+            raise ProjectionFailure("projection_window_not_prepared")
+        messages = lazy.view
     count = len(messages)
     recent = max(0, int(policy.reserved_tail_messages))
     if count - recent <= previous_end:
@@ -610,7 +766,7 @@ def choose_recent_boundary(config: ProjectionConfig, policy: CompactionPolicy,
 
     def total(boundary: int) -> int:
         tail = _expand(aged, messages, boundary, count, count, format_metadata,
-                       hard_max_chars=policy.verbatim_hard_max_chars)
+                       hard_max_chars=policy.verbatim_hard_max_chars, lazy=lazy)
         return base + _projection_wire_tokens(aged, tail)
 
     start_tokens = total(start)
@@ -636,7 +792,8 @@ def choose_recent_boundary(config: ProjectionConfig, policy: CompactionPolicy,
 def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict[str, Any]],
          active: Optional[CompactionRecord], state: Dict[str, Any], *, format_metadata: FormatMetadata,
          window_usable: int, fixed_overhead_tokens: int, force: bool = False,
-         send_safety_tokens: int = 0) -> Optional[Dict[str, Any]]:
+         send_safety_tokens: int = 0,
+         prepare_message: Optional[PrepareMessage] = None) -> Optional[Dict[str, Any]]:
     """Decide whether to compact and where (see :func:`choose_recent_boundary`).
 
     ``target_tokens`` (window × ``min_window_fraction``) is a selection goal only.
@@ -646,17 +803,21 @@ def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict
     ``send_safety_tokens`` (optional, product's final request line): when even the
     recent tail with no summary at all cannot fit under it, no summary can help, so the
     plan is refused before spending a model call.
+    ``prepare_message`` as in :func:`project`; the plan is identical either way.
     """
-    current = project(config, messages, active, state, format_metadata=format_metadata,
-                      fixed_overhead_tokens=fixed_overhead_tokens)
+    previous_end = active.covers_exclusive_end if active else 0
+    lazy = (_LazyHistory(messages, min(previous_end, int(state["tail_start"])), prepare_message)
+            if prepare_message is not None else None)
+    current = _project(config, messages, active, state, format_metadata=format_metadata,
+                       fixed_overhead_tokens=fixed_overhead_tokens, check_history=True,
+                       prefix_messages=None, lazy=lazy)
     trigger = policy.thresholds(window_usable)[0]
     if not policy.enabled or (not force and current.total_tokens <= trigger):
         return None
-    previous_end = active.covers_exclusive_end if active else 0
     target = policy.selection_target_tokens(window_usable)
-    choice = choose_recent_boundary(config, policy, messages, previous_end, target_tokens=target,
+    choice = _choose_recent_boundary(config, policy, messages, previous_end, target_tokens=target,
         fixed_overhead_tokens=fixed_overhead_tokens, format_metadata=format_metadata,
-        fold_to_start=force and current.total_tokens <= trigger)
+        fold_to_start=force and current.total_tokens <= trigger, lazy=lazy)
     if send_safety_tokens > 0 and choice.start_tokens - choice.reserve_tokens > send_safety_tokens:
         raise ProjectionFailure("recent_tail_exceeds_send_safety")
     return {"prev_end": previous_end, "prev_text": active.summary_text if active else "",

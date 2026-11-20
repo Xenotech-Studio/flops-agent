@@ -687,6 +687,7 @@ class ProjectionConfig:
         tool_tiers: Optional[Dict[int, str]] = None,
         grade: bool = True,
         user_trim_overrides: Optional[Dict[int, int]] = None,
+        tool_call_names: Optional[Dict[str, str]] = None,
     ) -> List[Dict[str, Any]]:
         """canonical messages[start_idx:end_idx) → the wire form sent to the LLM: user
         metadata is prepended as a system message; tool results are trimmed per their grade;
@@ -716,8 +717,10 @@ class ProjectionConfig:
         end = len(messages) if end_idx is None else min(end_idx, len(messages))
         # tool_call_id → tool name index: must scan the full messages list (a tool result in
         # this window may reference an assistant tool_call from earlier), not just the window.
-        tc_id_to_name: Dict[str, str] = {}
-        for _m in messages:
+        # ``tool_call_names`` (optional): the caller already resolved this map for the
+        # window's tool results, so older bodies need not be readable here.
+        tc_id_to_name: Dict[str, str] = dict(tool_call_names) if tool_call_names is not None else {}
+        for _m in (messages if tool_call_names is None else []):
             if not isinstance(_m, dict) or _m.get("role") != "assistant":  # pyright: ignore[reportUnnecessaryIsInstance] —— messages come from the caller's persistence layer; at runtime they may not actually be the declared Dict shape (legacy/malformed records)
                 continue
             _tcs = _m.get("tool_calls")

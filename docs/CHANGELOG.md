@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Optional `prepare_message` for `stable_compaction.project`, `plan` and
+  `choose_recent_boundary`. Callers may pass stored rows (for example still
+  encrypted); only the retained tail and the older rows a rule actually reads
+  (reinjected tool results, the calls naming them, tool names the window cannot
+  resolve) are prepared, with results byte-identical to preparing everything.
+  Identity-chain (v3) generations only; content-digest generations prepare all
+  rows. `ProjectionConfig.expand_canonical_to_llm_messages` accepts a precomputed
+  `tool_call_names` map.
 - Identity-chain history verification for stable compaction generations
   (`history_digest_version` 3). With `identity_field`, `initial_state` and every
   later generation hash only the persistence identity each message carries, never
