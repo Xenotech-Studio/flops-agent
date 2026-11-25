@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Optional database `synchronize_session` capability for atomic, identity-aware
+  reconciliation when independent writers append to a live session. Existing
+  database implementations retain their count-based synchronization behavior.
+
 - Optional `prepare_message` for `stable_compaction.project`, `plan` and
   `choose_recent_boundary`. Callers may pass stored rows (for example still
   encrypted); only the retained tail and the older rows a rule actually reads

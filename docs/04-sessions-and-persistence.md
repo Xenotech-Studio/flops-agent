@@ -39,6 +39,14 @@ Database requires granular operations for metadata reads, ranged message reads, 
 
 Both protocols use synchronous methods. Asynchronous framework paths offload storage calls to worker threads, so backends must support those calls. The framework's per-session lock is not a cross-process database transaction; the backend must still provide appropriate concurrency and consistency. owner_id is a data-addressing parameter, not a substitute for authentication.
 
+Backends with independent message writers may implement the optional
+`synchronize_session(session, *, keys=None) -> int` method. `sync_session` delegates
+the complete read/modify/write operation to this method, so the adapter can compare
+message identities and commit under its own transaction. The adapter owns conflict
+handling and returns the persisted count delta. Without this capability, the existing
+count-based append/truncate/tail-replacement behavior remains unchanged; it assumes
+exclusive history ownership during synchronization.
+
 ## Editing and long conversations
 
 Session supports truncation by message id and rewinding by user turn. When an edit could discard later user input, it requires explicit `consent=True` or may raise TruncationNeedsConsent. Confirm the user's intent first, then edit and persist history, and use `runtime.start(session)` to continue when appropriate.

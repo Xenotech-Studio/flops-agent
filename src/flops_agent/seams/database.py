@@ -195,6 +195,9 @@ def sync_session(database: Database, session: Session, *, keys: Optional[Mapping
     a costly whole-history rewrite. Returns the appended count (negative for a
     truncation and zero for an equal-length tail replacement).
     """
+    synchronize = getattr(database, "synchronize_session", None)
+    if synchronize is not None:
+        return synchronize(session, keys=keys)
     session_id, owner = session.session_id, session.owner_id
     stored = database.count_messages(session_id, owner_id=owner)
     current = len(session.messages)
