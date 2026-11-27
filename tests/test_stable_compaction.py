@@ -335,3 +335,62 @@ def test_manual_force_compacts_below_threshold_preserving_tail_pairing_and_reaso
     with pytest.raises(stable.ProjectionFailure, match="irreducible_tail_floor"):
         stable.plan(config, policy, messages, record, committed, format_metadata=fmt,
                     window_usable=500_000, fixed_overhead_tokens=100, force=True)
+
+
+@pytest.mark.parametrize(("limits", "code"), [
+    ({"minimum_tail_tokens": 10**6}, "post_compaction_tail_floor_unattainable"),
+    ({"send_safety_tokens": 1}, "post_compaction_send_safety_exceeded"),
+    ({"baseline_tokens": 1}, "post_compaction_no_reduction"),
+    ({}, "post_compaction_target_unattainable"),
+])
+def test_candidate_budget_refusals_keep_measured_components(limits, code):
+    config, policy = ProjectionConfig(), CompactionPolicy(reinject_tool_results_count=0)
+    messages, state = history(12), fresh(config, policy)
+    record = CompactionRecord("diagnostics", 3, "synthetic summary " * 100)
+    candidate = stable.next_generation(config, policy, messages, state, record,
+        format_metadata=fmt, target_tokens=10**6, fixed_overhead_tokens=50)
+    projected = stable.project(config, messages, record, candidate, format_metadata=fmt, fixed_overhead_tokens=50)
+    budget = {}
+    with pytest.raises(stable.ProjectionFailure, match=f"^{code}$"):
+        stable.next_generation(config, policy, messages, state, record,
+            format_metadata=fmt, target_tokens=1, fixed_overhead_tokens=50, budget=budget, **limits)
+    assert budget["candidate"] == {
+        "total_tokens": projected.total_tokens,
+        "tail_content_tokens": projected.tail_tokens,
+        "summary_content_tokens": projected.summary_tokens,
+        "restored_tool_content_tokens": projected.reinject_tokens,
+    }
+    assert budget["minimum_tail_tokens"] == limits.get("minimum_tail_tokens", 0)
+    assert budget["retained_restorations"] == 0
+
+
+def test_exact_boundary_refusal_records_wire_tail_and_fixed_budget():
+    config, policy = ProjectionConfig(), CompactionPolicy(enabled=True)
+    messages, state = history(8), fresh(config, policy)
+    budget = {}
+    with pytest.raises(stable.ProjectionFailure, match="^extreme_fixed_and_run_budget_unattainable$"):
+        stable.plan_exact_boundary(config, policy, messages, None, state, format_metadata=fmt,
+            window_usable=100_000, fixed_overhead_tokens=123, exact_tail_start=3, send_safety_tokens=100,
+            budget=budget)
+    assert budget["exact_tail_start"] == 3
+    assert budget["selected_tail_wire_tokens"] > 0
+    assert budget["selected_total_without_summary_tokens"] == 123 + budget["selected_tail_wire_tokens"]
+
+
+@pytest.mark.parametrize(("limits", "expected", "attempted_depth"), [
+    ({"max_depth": 1}, "summary_split_depth_exceeded", 1),
+    ({"max_calls": 1}, "summary_split_call_budget_exceeded", 1),
+])
+def test_fold_limit_diagnostics(limits, expected, attempted_depth):
+    def overflow(_previous, _segment):
+        raise ExplicitOverflow("context-length")
+
+    details = {}
+    with pytest.raises(stable.ProjectionFailure, match=f"^{expected}$"):
+        stable.fold_summary_on_context_overflow(
+            "", [{"role": "user", "content": str(i)} for i in range(8)], overflow, _is_overflow,
+            diagnostics=details, **limits)
+    assert details["attempted_depth"] == attempted_depth
+    assert details["segment_messages"] == 4
+    for limit, value in limits.items():
+        assert details[{"max_depth": "max_split_depth", "max_calls": "max_model_calls"}[limit]] == value

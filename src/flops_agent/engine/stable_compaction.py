@@ -687,6 +687,14 @@ def _project(config: ProjectionConfig, messages: List[Dict[str, Any]], active: O
         total_tokens=max(0, fixed_overhead_tokens) + _projection_wire_tokens(cfg, wire), policy_trace=trace(state))
 
 
+
+def projection_budget(projection: ContextProjection) -> Dict[str, int]:
+    """Return the estimator's total and its separately measured content components."""
+    return {"total_tokens": projection.total_tokens, "tail_content_tokens": projection.tail_tokens,
+            "summary_content_tokens": projection.summary_tokens,
+            "restored_tool_content_tokens": projection.reinject_tokens}
+
+
 def summary_reserve_tokens(config: ProjectionConfig, policy: CompactionPolicy) -> int:
     """Upper-bound room for the summary that does not exist yet: its system-message
     framing plus the summary call's output ceiling (``max_output_tokens``)."""
@@ -793,7 +801,8 @@ def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict
          active: Optional[CompactionRecord], state: Dict[str, Any], *, format_metadata: FormatMetadata,
          window_usable: int, fixed_overhead_tokens: int, force: bool = False,
          send_safety_tokens: int = 0,
-         prepare_message: Optional[PrepareMessage] = None) -> Optional[Dict[str, Any]]:
+         prepare_message: Optional[PrepareMessage] = None,
+         budget: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """Decide whether to compact and where (see :func:`choose_recent_boundary`).
 
     ``target_tokens`` (window × ``min_window_fraction``) is a selection goal only.
@@ -812,13 +821,24 @@ def plan(config: ProjectionConfig, policy: CompactionPolicy, messages: List[Dict
                        fixed_overhead_tokens=fixed_overhead_tokens, check_history=True,
                        prefix_messages=None, lazy=lazy)
     trigger = policy.thresholds(window_usable)[0]
+    target = policy.selection_target_tokens(window_usable)
+    if budget is not None:
+        budget.update(current=projection_budget(current), trigger_tokens=trigger, target_tokens=target,
+                      message_count=len(messages), previous_end=previous_end,
+                      reserved_tail_messages=policy.reserved_tail_messages)
     if not policy.enabled or (not force and current.total_tokens <= trigger):
         return None
-    target = policy.selection_target_tokens(window_usable)
     choice = _choose_recent_boundary(config, policy, messages, previous_end, target_tokens=target,
         fixed_overhead_tokens=fixed_overhead_tokens, format_metadata=format_metadata,
         fold_to_start=force and current.total_tokens <= trigger, lazy=lazy)
-    if send_safety_tokens > 0 and choice.start_tokens - choice.reserve_tokens > send_safety_tokens:
+    recent_without_summary = choice.start_tokens - choice.reserve_tokens
+    if budget is not None:
+        budget.update(selected_tail_start=choice.boundary, selection=choice.selection,
+                      recent_boundary=choice.start, summary_reserve_tokens=choice.reserve_tokens,
+                      selected_estimated_total_tokens=choice.estimated_tokens,
+                      recent_total_without_summary_tokens=recent_without_summary,
+                      selected_tail_wire_tokens=choice.estimated_tokens - choice.reserve_tokens - max(0, fixed_overhead_tokens))
+    if send_safety_tokens > 0 and recent_without_summary > send_safety_tokens:
         raise ProjectionFailure("recent_tail_exceeds_send_safety")
     return {"prev_end": previous_end, "prev_text": active.summary_text if active else "",
             "new_until": choice.boundary, "target_tokens": target, "trigger_tokens": trigger,
@@ -831,7 +851,8 @@ def plan_exact_boundary(config: ProjectionConfig, policy: CompactionPolicy,
                         messages: List[Dict[str, Any]], active: Optional[CompactionRecord],
                         state: Dict[str, Any], *, format_metadata: FormatMetadata,
                         window_usable: int, fixed_overhead_tokens: int,
-                        exact_tail_start: int, send_safety_tokens: int = 0) -> Dict[str, Any]:
+                        exact_tail_start: int, send_safety_tokens: int = 0,
+                        budget: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Plan a manual compaction whose raw tail starts at an authoritative boundary.
 
     Unlike :func:`plan`, this never searches for a cheaper boundary.  The caller
@@ -842,6 +863,8 @@ def plan_exact_boundary(config: ProjectionConfig, policy: CompactionPolicy,
         raise ProjectionFailure("disabled")
     previous_end = active.covers_exclusive_end if active else 0
     boundary = int(exact_tail_start)
+    if budget is not None:
+        budget.update(exact_tail_start=boundary, message_count=len(messages), previous_end=previous_end)
     if boundary < 0 or boundary > len(messages):
         raise ProjectionFailure("extreme_run_boundary_stale")
     if previous_end > boundary:
@@ -855,7 +878,12 @@ def plan_exact_boundary(config: ProjectionConfig, policy: CompactionPolicy,
         tiers_by_identity={tool_identity(i, messages[i]): tier for i, tier in config.compute_tool_tiers(messages).items()})
     tail = _expand(aged, messages, boundary, len(messages), len(messages),
                    format_metadata, hard_max_chars=policy.verbatim_hard_max_chars)
-    if send_safety_tokens > 0 and max(0, fixed_overhead_tokens) + _projection_wire_tokens(aged, tail) > send_safety_tokens:
+    tail_wire_tokens = _projection_wire_tokens(aged, tail)
+    total_without_summary = max(0, fixed_overhead_tokens) + tail_wire_tokens
+    if budget is not None:
+        budget.update(target_tokens=target, selected_tail_wire_tokens=tail_wire_tokens,
+                      selected_total_without_summary_tokens=total_without_summary)
+    if send_safety_tokens > 0 and total_without_summary > send_safety_tokens:
         raise ProjectionFailure("extreme_fixed_and_run_budget_unattainable")
     return {"prev_end": previous_end, "prev_text": active.summary_text if active else "",
             "new_until": boundary, "target_tokens": target, "trigger_tokens": 0,
@@ -962,6 +990,7 @@ def fold_summary_on_context_overflow(
     telemetry: Optional[SummaryFoldTelemetry] = None,
     max_depth: int = 12,
     max_calls: int = 64,
+    diagnostics: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Summarize all history, splitting only after an explicit provider overflow.
 
@@ -976,6 +1005,9 @@ def fold_summary_on_context_overflow(
     stats = telemetry if telemetry is not None else SummaryFoldTelemetry()
 
     def run(previous: str, segment: List[Dict[str, Any]], depth: int) -> str:
+        if diagnostics is not None:
+            diagnostics.update(max_split_depth=max_depth, max_model_calls=max_calls,
+                               attempted_depth=depth, segment_messages=len(segment))
         if depth > max_depth:
             raise ProjectionFailure("summary_split_depth_exceeded")
         if stats.model_calls >= max_calls:
@@ -995,6 +1027,8 @@ def fold_summary_on_context_overflow(
         else:
             clean = str(result or "").strip()
             if not clean:
+                if diagnostics is not None:
+                    diagnostics.update(summary_chars=len(clean), minimum_chars=1)
                 raise ProjectionFailure("empty_summary_segment")
             return clean
 
@@ -1018,7 +1052,8 @@ def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages
                     target_tokens: int, fixed_overhead_tokens: int, minimum_tail_tokens: int = 0,
                     reason: str = "context_threshold", send_safety_tokens: int = 0,
                     baseline_tokens: Optional[int] = None,
-                    prefix_messages: PrefixSource = None) -> Dict[str, Any]:
+                    prefix_messages: PrefixSource = None,
+                    budget: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Build the candidate generation for an already generated summary.
 
     Optional tool restorations are dropped (oldest first) until ``target_tokens`` is met.
@@ -1069,6 +1104,9 @@ def next_generation(config: ProjectionConfig, policy: CompactionPolicy, messages
     while True:
         result = project(config, messages, record, state, format_metadata=format_metadata,
                          fixed_overhead_tokens=fixed_overhead_tokens, check_history=False)
+        if budget is not None:
+            budget.update(candidate=projection_budget(result), minimum_tail_tokens=minimum_tail_tokens,
+                          retained_restorations=len(state["reinject_indices"]))
         if result.tail_tokens < minimum_tail_tokens:
             raise ProjectionFailure("post_compaction_tail_floor_unattainable")
         within_safety = send_safety_tokens <= 0 or result.total_tokens <= send_safety_tokens

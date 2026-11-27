@@ -49,7 +49,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union, cast
 
 from flops_agent.seams.compaction_store import CompactionRecord
 
@@ -1159,36 +1159,53 @@ def detect_repeated_lines(s: str, *, threshold: int = 3, min_line_len: int = 30)
     return None
 
 
-def quality_gate_check(
+def quality_gate_diagnostics(
     summary_text: str, transcript: str, *, prev_text: str = "", enabled: bool = True
-) -> Optional[str]:
-    """Returns None on pass; otherwise returns a failure-reason string. Checks:
-    1) Length floor: summary < max(800, 0.4 × len(prev_text))
-    2) Language shift: transcript CJK ratio > 30% but summary CJK ratio drops by 25+ points
-    3) Repetition loop: a long line repeated ≥3 times
-    """
+) -> Optional[Dict[str, Union[str, int, float]]]:
+    """Report the first failed quality check using only codes and measurements."""
     if not enabled:
         return None
+    length = len(summary_text)
     if not summary_text:
-        return "empty_summary"
+        return {"code": "empty_summary", "summary_chars": length, "minimum_chars": 1}
 
-    floor = 800
-    if prev_text:
-        floor = max(floor, int(0.4 * len(prev_text)))
-    if len(summary_text) < floor:
-        return f"too_short(len={len(summary_text)}, floor={floor})"
+    floor = max(800, int(0.4 * len(prev_text)))
+    if length < floor:
+        return {"code": "too_short", "summary_chars": length, "minimum_chars": floor,
+                "previous_summary_chars": len(prev_text), "base_minimum_chars": 800,
+                "previous_summary_fraction": 0.4}
 
     tr_cjk = cjk_char_ratio(transcript)
     sm_cjk = cjk_char_ratio(summary_text)
     if tr_cjk > 0.30 and sm_cjk + 0.25 < tr_cjk:
-        return f"language_shift(transcript_cjk={tr_cjk:.2f}, summary_cjk={sm_cjk:.2f})"
+        return {"code": "language_shift", "transcript_cjk_ratio": tr_cjk,
+                "summary_cjk_ratio": sm_cjk, "cjk_ratio_drop": tr_cjk - sm_cjk,
+                "transcript_cjk_threshold": 0.30, "cjk_drop_threshold": 0.25}
 
-    rep = detect_repeated_lines(summary_text)
-    if rep is not None:
-        rep_preview = rep[:80] + ("..." if len(rep) > 80 else "")
-        return f"repetition_detected: {rep_preview!r}"
-
+    threshold, min_line_len = 3, 30
+    repeated = detect_repeated_lines(summary_text, threshold=threshold, min_line_len=min_line_len)
+    if repeated is not None:
+        return {"code": "repetition_detected",
+                "line_occurrences": sum(line.strip() == repeated for line in summary_text.split("\n")),
+                "line_chars": len(repeated), "minimum_line_chars": min_line_len,
+                "occurrence_threshold": threshold}
     return None
+
+
+def quality_gate_check(
+    summary_text: str, transcript: str, *, prev_text: str = "", enabled: bool = True
+) -> Optional[str]:
+    """Compatibility entry point returning a content-free failure reason."""
+    details = quality_gate_diagnostics(summary_text, transcript, prev_text=prev_text, enabled=enabled)
+    if details is None:
+        return None
+    code = str(details["code"])
+    if code == "too_short":
+        return f"too_short(len={details['summary_chars']}, floor={details['minimum_chars']})"
+    if code == "language_shift":
+        return (f"language_shift(transcript_cjk={details['transcript_cjk_ratio']:.2f}, "
+                f"summary_cjk={details['summary_cjk_ratio']:.2f})")
+    return code
 
 
 # ---------------------------------------------------------------------------
@@ -1786,6 +1803,7 @@ __all__ = [
     "cjk_char_ratio",
     "detect_repeated_lines",
     "quality_gate_check",
+    "quality_gate_diagnostics",
     "FROM_SCRATCH_SUMMARY_PROMPT",
     "DEFAULT_SUMMARIZER_SYSTEM_PROMPT",
     "serialize_messages_for_summary",
