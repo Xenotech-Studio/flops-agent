@@ -50,6 +50,7 @@ import math
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union, cast
+from unicodedata import name
 
 from flops_agent.seams.compaction_store import CompactionRecord
 
@@ -1142,7 +1143,18 @@ def cjk_char_ratio(s: str) -> float:
     return cnt / max(1, total)
 
 
-def detect_repeated_lines(s: str, *, threshold: int = 3, min_line_len: int = 30) -> Optional[str]:
+_REPETITION_THRESHOLD = 3
+_REPETITION_MIN_LINE_LENGTH = 30
+_NON_SPACE_DELIMITED_SCRIPTS = (
+    "CJK ", "HIRAGANA ", "KATAKANA ", "HANGUL ", "BOPOMOFO ",
+    "THAI ", "LAO ", "KHMER ", "MYANMAR ", "TIBETAN ",
+)
+
+
+def detect_repeated_lines(
+    s: str, *, threshold: int = _REPETITION_THRESHOLD,
+    min_line_len: int = _REPETITION_MIN_LINE_LENGTH,
+) -> Optional[str]:
     """Returns the first "non-short" line (after stripping) that appears ≥threshold times,
     which indicates generation got stuck in a repetition loop. Returns None if there's no
     repetition."""
@@ -1157,6 +1169,26 @@ def detect_repeated_lines(s: str, *, threshold: int = 3, min_line_len: int = 30)
         if counts[l] >= threshold:
             return l
     return None
+
+
+def abbreviate_repeated_summary_lines(summary: str) -> str:
+    """Keep the first two occurrences under the existing stripped-line rule."""
+    counts: Dict[str, int] = {}
+    lines = summary.split("\n")
+    for index, original in enumerate(lines):
+        line = original.strip()
+        if len(line) < _REPETITION_MIN_LINE_LENGTH:
+            continue
+        count = counts.get(line, 0) + 1
+        counts[line] = count
+        if count < _REPETITION_THRESHOLD:
+            continue
+        if any(name(char, "").startswith(_NON_SPACE_DELIMITED_SCRIPTS) for char in line):
+            preview = line[:15]
+        else:
+            preview = " ".join(line.split()[:10])
+        lines[index] = f"（repeat：“{preview}...”）"
+    return "\n".join(lines)
 
 
 def quality_gate_diagnostics(
@@ -1182,13 +1214,6 @@ def quality_gate_diagnostics(
                 "summary_cjk_ratio": sm_cjk, "cjk_ratio_drop": tr_cjk - sm_cjk,
                 "transcript_cjk_threshold": 0.30, "cjk_drop_threshold": 0.25}
 
-    threshold, min_line_len = 3, 30
-    repeated = detect_repeated_lines(summary_text, threshold=threshold, min_line_len=min_line_len)
-    if repeated is not None:
-        return {"code": "repetition_detected",
-                "line_occurrences": sum(line.strip() == repeated for line in summary_text.split("\n")),
-                "line_chars": len(repeated), "minimum_line_chars": min_line_len,
-                "occurrence_threshold": threshold}
     return None
 
 
@@ -1802,6 +1827,7 @@ __all__ = [
     "build_context_projection",
     "cjk_char_ratio",
     "detect_repeated_lines",
+    "abbreviate_repeated_summary_lines",
     "quality_gate_check",
     "quality_gate_diagnostics",
     "FROM_SCRATCH_SUMMARY_PROMPT",
