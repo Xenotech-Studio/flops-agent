@@ -1123,9 +1123,7 @@ def build_context_projection(
 
 
 # ---------------------------------------------------------------------------
-# Summary quality gate: detects whether the compaction model has fallen into one of
-# three degeneration modes — switching to another language / repetition loops / a
-# perfunctorily-short summary
+# Summary quality checks and repeated-line abbreviation
 # ---------------------------------------------------------------------------
 
 
